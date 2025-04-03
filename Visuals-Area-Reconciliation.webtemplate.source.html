@@ -1,0 +1,2191 @@
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+
+{% fetchxml ASFlowId %}
+<fetch>
+    <entity name="mspp_sitesetting">
+        <attribute name="mspp_sitesettingid" />
+        <attribute name="mspp_value" />
+        <filter type="and">
+            <condition attribute="mspp_name" operator="eq" value="FlowID | Get Area Schedule and Floors and Return" />
+        </filter>
+    </entity>
+</fetch>
+{% endfetchxml %}
+
+{% fetchxml ACCGsFlowId %}
+<fetch>
+    <entity name="mspp_sitesetting">
+        <attribute name="mspp_sitesettingid" />
+        <attribute name="mspp_value" />
+        <filter type="and">
+            <condition attribute="mspp_name" operator="eq"
+                value="FlowID | Get Floors and Related AreaComponentCategoryGroups and Return" />
+        </filter>
+    </entity>
+</fetch>
+{% endfetchxml %}
+
+<script>
+    let currentTable = false;
+    let previousTable = false;
+    let deltaTable = false;
+    let isPrevModelHL = '';
+    let iscurrModelHL = '';
+    let previousGIA = 0, currentGIA = 0, previousNIA = 0, currentNIA = 0, previousNTG = 0, currentNTG = 0;
+    function convertArea(value, toSquareMeters) {
+        return toSquareMeters ? value * 0.092903 : value * 10.7639;
+    }
+
+    $(document).ready(function () {
+        if ('{{request.params.building_stage_instance}}' && '{{request.params.building_stage_instance}}' != 'undefined') {
+            $("#selectionModal").hide();
+        }
+        else {
+            $("#selectionModal").show();
+            document.getElementById("errorMessage").innerHTML = "There are no Area Schedules or Cost Models associated with this building.";
+        }
+        var sidebar = document.getElementById("sidebar");
+        sidebar.style.width = "500px";
+        document.querySelector(".modalBackdrop").classList.remove("d-none");
+        document.getElementById("collapseKpis_ac_btn").addEventListener("click", function () {
+            document.querySelector(".ac_kpis").classList.toggle("collapsed");
+            document.getElementById("collapseKpis_ac_btn").classList.toggle("rotate");
+        });
+
+        $('#model_selection').on('change', function () {
+            if (($("#model_selection_1").val() !==  null) && ($("#model_selection").val() !== "" || $("#model_selection").val() !== null)) {
+                setTimeout(function () {
+                    document.querySelector(".modalBackdrop").classList.add("d-none");
+                    getASData();
+                }, 200);
+            }
+        });
+
+        $('#model_selection_1').on('change', function () {
+            if ($("#model_selection_1").val() !== "" && $("#model_selection").val() !== "") {
+                setTimeout(function () {
+                    document.querySelector(".modalBackdrop").classList.add("d-none");
+                    getASData();
+                }, 200);
+            }
+        });
+
+        function showHideLastGIA(id, show) {
+            if (show) {
+                document.getElementById(id).style.display = 'table-row'
+            } else {
+                document.getElementById(id).style.display = 'none'
+            }
+        }
+
+        document.querySelector(".expand_previous").addEventListener("click", () => {
+            ExpandTriger("area_summary_table")
+            document.querySelector(".expandIcon_").classList.toggle("d-none");
+            document.querySelector(".closeexpandtabled_").classList.toggle("d-none");
+            previousTable = true;
+            showHideLastGIA("gia-rowtableBody", true)
+        });
+
+        document.querySelector(".expand_current").addEventListener("click", () => {
+            ExpandTriger("area_summary_table_p")
+            document.querySelector(".expandIcon_p").classList.toggle("d-none");
+            document.querySelector(".closeexpandtabled_p").classList.toggle("d-none");
+            currentTable = true;
+            showHideLastGIA("gia-rowtableBody_p", true)
+        });
+
+        document.querySelector(".expand_delta").addEventListener("click", () => {
+            ExpandTriger("area_summary_table_d")
+            document.querySelector(".expandIcon_d").classList.toggle("d-none");
+            document.querySelector(".closeexpandtabled_d").classList.toggle("d-none");
+            deltaTable = true;
+
+        });
+
+        function ExpandTriger(tableID) {
+            const screenHeight = window.innerHeight;
+            const isShortScreen = screenHeight < 1024;
+            document.querySelector(".modalBackdrop").classList.toggle("d-none");
+            ExpandTable(tableID)
+            document.body.classList.toggle("overflow-hidden");
+            document.querySelector("#" + tableID).classList.toggle(isShortScreen ? "expand_short" : "expand")
+        }
+
+        document.querySelector(".closeexpandtabled_").addEventListener("click", () => {
+            document.querySelector(".closeexpandtabled_").classList.toggle("d-none");
+            document.querySelector(".expandIcon_").classList.toggle("d-none");
+            CloseTriger("area_summary_table");
+            hideAfterExpand("area_summary_table");
+            previousTable = false;
+            showHideLastGIA("gia-rowtableBody", false)
+        });
+
+        document.querySelector(".closeexpandtabled_p").addEventListener("click", () => {
+            document.querySelector(".closeexpandtabled_p").classList.toggle("d-none");
+            document.querySelector(".expandIcon_p").classList.toggle("d-none");
+            CloseTriger("area_summary_table_p");
+            hideAfterExpand("area_summary_table_p");
+            currentTable = false;
+            showHideLastGIA("gia-rowtableBody_p", false)
+        });
+
+        document.querySelector(".closeexpandtabled_d").addEventListener("click", () => {
+            document.querySelector(".closeexpandtabled_d").classList.toggle("d-none");
+            document.querySelector(".expandIcon_d").classList.toggle("d-none");
+            CloseTriger("area_summary_table_d");
+            hideAfterExpand("area_summary_table_d");
+            deltaTable = false;
+        });
+
+        function CloseTriger(tableID) {
+            const screenHeight = window.innerHeight;
+            const isShortScreen = screenHeight < 1024;
+            document.querySelector(".modalBackdrop").classList.toggle("d-none");
+            document.body.classList.toggle("overflow-hidden");
+            document.querySelector(`#${tableID}`).classList.toggle(isShortScreen ? "expand_short" : "expand")
+        }
+    });
+
+    let niaDataforareaComposition1, LandLordDataforareaComposition1, niaDataforareaComposition2, LandLordDataforareaComposition2, niaforGnL1, niaforGnL2, giaforGnL1, giaforGnL2 = 0;
+    let labelforareaComposition1, labelforareaComposition2 = '';
+    let DataforGnL, LabelsforGnL, niaLengthforGnL, LandlordLengthforGnL, labelsforFbFSplit, giaDataArrayforFbFSplit, niaDataArrayforFbFSplit = [];
+
+    function getASData() {
+        document.getElementById('loader').style.display = 'flex';
+        document.getElementById("expandTblCurr").classList.add('d-none');
+        document.getElementById("expandTblPrev").classList.add('d-none');
+        document.getElementById("collapseTblCurr").classList.add('d-none');
+        document.getElementById("collapseTblPrev").classList.add('d-none');
+        var _url = "/_api/cloudflow/v1.0/trigger/" + '{{ASFlowId.results.entities.first.mspp_value}}';
+        var data = {};
+        let urlParams = new URLSearchParams(window.location.search);
+        data["areaScheduleId"] = urlParams.get('area_schedule');
+        data["BSIID"] = urlParams.get('building_stage_instance');
+        var payload = {};
+        payload.eventData = JSON.stringify(data);
+        shell.ajaxSafePost({
+            type: "POST",
+            contentType: "application/json",
+            url: _url,
+            data: JSON.stringify(payload),
+            processData: false,
+            global: false,
+        }).done(function (response) {
+            const result = JSON.parse(response);
+            const data = JSON.parse(result.returndata);
+            var data1 = {};
+            data1["areaScheduleId"] = sessionStorage.getItem("area_schedule_previous");
+            data1["BSIID"] = sessionStorage.getItem('building_stage_instance_previous');
+            var payload1 = {};
+            payload1.eventData = JSON.stringify(data1);
+            shell.ajaxSafePost({
+                type: "POST",
+                contentType: "application/json",
+                url: _url,
+                data: JSON.stringify(payload1),
+                processData: false,
+                global: false,
+            }).done(function (response) {
+                const result1 = JSON.parse(response);
+                const data1 = JSON.parse(result1.returndata);
+                previousGIA = data1.exi_totalgrossinternalallfloors;
+                currentGIA = data.exi_totalgrossinternalallfloors;
+                previousNIA = data1.exi_totalnetinternalallfloors;
+                currentNIA = data.exi_totalnetinternalallfloors;
+                previousNTG = data1.exi_total_net_to_gross_all_floors;
+                currentNTG = data.exi_total_net_to_gross_all_floors;
+                isPrevModelHL = data1.exi_schedule_type === 3 || data1.exi_schedule_type === 1;
+                iscurrModelHL = data.exi_schedule_type === 3 || data.exi_schedule_type === 1;
+                if (data.exi_totalnetinternalallfloors > data1.exi_totalnetinternalallfloors) {
+                    document.getElementById("t_nia_val").innerHTML = (Math.round(data.exi_totalnetinternalallfloors) - Math.round(data1.exi_totalnetinternalallfloors)).toLocaleString();
+                    document.querySelector("#t_nia .fa-arrow-up-long").classList.remove('d-none');
+                    document.querySelector("#t_nia .fa-arrow-down-long").classList.add('d-none');
+                    document.querySelector("#t_nia .fa-arrows-left-right").classList.add('d-none');
+                }
+                else if (data.exi_totalnetinternalallfloors < data1.exi_totalnetinternalallfloors) {
+                    document.getElementById("t_nia_val").innerHTML = (Math.round(data1.exi_totalnetinternalallfloors) - Math.round(data.exi_totalnetinternalallfloors)).toLocaleString();
+                    document.querySelector("#t_nia .fa-arrow-up-long").classList.add('d-none');
+                    document.querySelector("#t_nia .fa-arrow-down-long").classList.remove('d-none');
+                    document.querySelector("#t_nia .fa-arrows-left-right").classList.add('d-none');
+                }
+                else if (data.exi_totalnetinternalallfloors == data1.exi_totalnetinternalallfloors) {
+                    document.getElementById("t_nia_val").innerHTML = 0;
+                    document.querySelector("#t_nia .fa-arrow-up-long").classList.add('d-none');
+                    document.querySelector("#t_nia .fa-arrow-down-long").classList.add('d-none');
+                    document.querySelector("#t_nia .fa-arrows-left-right").classList.remove('d-none');
+                }
+                if (data.exi_totalgrossinternalallfloors > data1.exi_totalgrossinternalallfloors) {
+                    document.getElementById("t_gia_val").innerHTML = (data.exi_totalgrossinternalallfloors - data1.exi_totalgrossinternalallfloors).toLocaleString();
+                    document.querySelector("#t_gia .fa-arrow-up-long").classList.remove('d-none');
+                    document.querySelector("#t_gia .fa-arrow-down-long").classList.add('d-none');
+                    document.querySelector("#t_gia .fa-arrows-left-right").classList.add('d-none');
+                }
+                else if (data.exi_totalgrossinternalallfloors < data1.exi_totalgrossinternalallfloors) {
+                    document.getElementById("t_gia_val").innerHTML = (data1.exi_totalgrossinternalallfloors - data.exi_totalgrossinternalallfloors).toLocaleString();
+                    document.querySelector("#t_gia .fa-arrow-up-long").classList.add('d-none');
+                    document.querySelector("#t_gia .fa-arrow-down-long").classList.remove('d-none');
+                    document.querySelector("#t_gia .fa-arrows-left-right").classList.add('d-none');
+                }
+                else if (data.exi_totalgrossinternalallfloors == data1.exi_totalgrossinternalallfloors) {
+                    document.getElementById("t_gia_val").innerHTML = 0;
+                    document.querySelector("#t_gia .fa-arrow-up-long").classList.add('d-none');
+                    document.querySelector("#t_gia .fa-arrow-down-long").classList.add('d-none');
+                    document.querySelector("#t_gia .fa-arrows-left-right").classList.remove('d-none');
+                }
+                if (data.exi_total_net_to_gross_all_floors > data1.exi_total_net_to_gross_all_floors) {
+                    document.getElementById("t_ntg_val").innerHTML = ((data.exi_total_net_to_gross_all_floors * 100) - (data1.exi_total_net_to_gross_all_floors * 100)).toFixed(2);
+                    document.querySelector("#t_ntg .fa-arrow-up-long").classList.remove('d-none');
+                    document.querySelector("#t_ntg .fa-arrow-down-long").classList.add('d-none');
+                    document.querySelector("#t_ntg .fa-arrows-left-right").classList.add('d-none');
+                }
+                else if (data.exi_total_net_to_gross_all_floors < data1.exi_total_net_to_gross_all_floors) {
+                    document.getElementById("t_ntg_val").innerHTML = ((data1.exi_total_net_to_gross_all_floors * 100) - (data.exi_total_net_to_gross_all_floors * 100)).toFixed(2);
+                    document.querySelector("#t_ntg .fa-arrow-up-long").classList.add('d-none');
+                    document.querySelector("#t_ntg .fa-arrow-down-long").classList.remove('d-none');
+                    document.querySelector("#t_ntg .fa-arrows-left-right").classList.add('d-none');
+                }
+                else if (data.exi_total_net_to_gross_all_floors == data1.exi_total_net_to_gross_all_floors) {
+                    document.getElementById("t_ntg_val").innerHTML = 0;
+                    document.querySelector("#t_ntg .fa-arrow-up-long").classList.add('d-none');
+                    document.querySelector("#t_ntg .fa-arrow-down-long").classList.add('d-none');
+                    document.querySelector("#t_ntg .fa-arrows-left-right").classList.remove('d-none');
+                }
+                if (isPrevModelHL || iscurrModelHL) {
+                    document.getElementById("t_fc_val").innerHTML = "N/A";
+                    document.querySelector("#t_fc .fa-arrow-up-long").classList.add('d-none');
+                    document.querySelector("#t_fc .fa-arrow-down-long").classList.add('d-none');
+                    document.querySelector("#t_fc .fa-arrows-left-right").classList.remove('d-none');
+                }
+                else {
+                    if (data.exi_total_storeys > data1.exi_total_storeys) {
+                        document.getElementById("t_fc_val").innerHTML = (data.exi_total_storeys - data1.exi_total_storeys).toFixed(0);
+                        document.querySelector("#t_fc .fa-arrow-up-long").classList.remove('d-none');
+                        document.querySelector("#t_fc .fa-arrow-down-long").classList.add('d-none');
+                        document.querySelector("#t_fc .fa-arrows-left-right").classList.add('d-none');
+                    }
+
+                    else if (data.exi_total_storeys < data1.exi_total_storeys) {
+                        document.getElementById("t_fc_val").innerHTML = (data1.exi_total_storeys - data.exi_total_storeys).toFixed(0);
+                        document.querySelector("#t_fc .fa-arrow-up-long").classList.add('d-none');
+                        document.querySelector("#t_fc .fa-arrow-down-long").classList.remove('d-none');
+                        document.querySelector("#t_fc .fa-arrows-left-right").classList.add('d-none');
+                    }
+                    else if (data.exi_total_storeys == data1.exi_total_storeys) {
+                        document.getElementById("t_fc_val").innerHTML = 'No Change';
+                        document.querySelector("#t_fc .fa-arrow-up-long").classList.add('d-none');
+                        document.querySelector("#t_fc .fa-arrow-down-long").classList.add('d-none');
+                        document.querySelector("#t_fc .fa-arrows-left-right").classList.remove('d-none');
+                    }
+                }
+
+                document.getElementById("p_stage_head").innerHTML = result1.stagename;
+                document.getElementById("c_stage_head").innerHTML = result.stagename;
+                document.getElementById("areas_stage_p").innerHTML = result1.stagename;
+                document.getElementById("areas_stage_c").innerHTML = result.stagename;
+                document.getElementById("internalProjectStagePrevious_1").innerHTML = result1.stagename;
+                document.getElementById("internalProjectStageCurrent_1").innerHTML = result.stagename;
+                document.getElementById("AreaScheduleNamePrevious_1").innerHTML = data1["exi_schedule_name"];
+                document.getElementById("AreaScheduleNameCurrent_1").innerHTML = data["exi_schedule_name"];
+                document.getElementById("internalProjectStagePrevious").innerHTML = result1.stagename;
+                document.getElementById("internalProjectStageCurrent").innerHTML = result.stagename;
+                areaSummary_gnl(result.stagename, result1.stagename, data.exi_totalnetinternalallfloors, data1.exi_totalnetinternalallfloors, data.exi_totalgrossinternalallfloors, data1.exi_totalgrossinternalallfloors, localStorage.getItem("convertToMeterSq") == 'true' ? true : false);
+                niaforGnL1 = data1.exi_totalnetinternalallfloors;
+                giaforGnL1 = data1.exi_totalgrossinternalallfloors;
+                niaforGnL2 = data.exi_totalnetinternalallfloors;
+                giaforGnL2 = data.exi_totalgrossinternalallfloors;
+
+                areaComposition_doughnutChart_1(data1.exi_totalnetinternalallfloors, (data1.exi_totalgrossinternalallfloors - data1.exi_totalnetinternalallfloors), result1.stagename, localStorage.getItem("convertToMeterSq") == 'true' ? true : false);
+                areaComposition_doughnutChart_2(data.exi_totalnetinternalallfloors, (data.exi_totalgrossinternalallfloors - data.exi_totalnetinternalallfloors), result.stagename, localStorage.getItem("convertToMeterSq") == 'true' ? true : false);
+
+                niaDataforareaComposition1 = data1.exi_totalnetinternalallfloors;
+                LandLordDataforareaComposition1 = (data1.exi_totalgrossinternalallfloors - data1.exi_totalnetinternalallfloors);
+                labelforareaComposition1 = result1.stagename;
+                niaDataforareaComposition2 = data.exi_totalnetinternalallfloors;
+                LandLordDataforareaComposition2 = (data.exi_totalgrossinternalallfloors - data.exi_totalnetinternalallfloors);
+                labelforareaComposition2 = result.stagename;
+
+                let elements = document.querySelectorAll('[data-convertible]');
+                let unitElements = document.querySelectorAll('.unit');
+                elements.forEach(element => {
+                    element.dataset.originalValue = element.innerHTML.replace(/,/g, '');
+                });
+                getNIAandLandLordData();
+
+                const key = "exi_schedule_type@OData.Community.Display.V1.FormattedValue";
+                document.querySelector(".TypeLable_p").innerHTML = data1[key].includes("Detailed") ? "Detailed" : data1[key];
+                document.querySelector(".TypeLable_c").innerHTML = data[key].includes("Detailed") ? "Detailed" : data[key];
+
+                updateTypeLabels(data, data1);
+
+                const hlTableElements = [
+                    document.querySelector("#area_summary_table .table_AS_hl"),
+                    document.querySelector("#area_summary_table_p .table_AS_hl")
+                ];
+
+                hlTableElements.forEach(el => {
+                    if (el) el.remove();
+                });
+
+                if (iscurrModelHL || isPrevModelHL) {
+                    document.querySelector(".gain_loss_wrap").style.display = 'none';
+                    document.querySelector("#area_summary_table_d").style.display = 'none';
+                    document.querySelector(".horizontalBarChart_wrap").style.display = 'none';
+                    document.querySelector('.barChart_3_wrap').classList.remove("col-sm-6");
+                    document.querySelector('.barChart_3_wrap').classList.add("col-sm-12");
+                    document.getElementById("barChart_3").classList.add("barChart_fullHeight");
+                    document.getElementById("barChart_3").style.width = "100%";
+                    document.getElementById("barChart_3").style.height = "100%";
+
+                    areaSummary_gnl(
+                        result.stagename, result1.stagename,
+                        data.exi_totalnetinternalallfloors, data1.exi_totalnetinternalallfloors,
+                        data.exi_totalgrossinternalallfloors, data1.exi_totalgrossinternalallfloors,
+                        localStorage.getItem("convertToMeterSq") === 'true'
+                    );
+
+                    if (isPrevModelHL) {
+                        updateTableValues("#area_summary_table", previousNIA, previousGIA, previousNTG);
+                    }
+                    if (iscurrModelHL) {
+                        updateTableValues("#area_summary_table_p", currentNIA, currentGIA, currentNTG);
+                    }
+                } 
+                else {
+                    document.querySelector(".gain_loss_wrap").style.display = '';
+                    document.querySelector("#area_summary_table_d").style.display = ''; 
+                    document.querySelector(".horizontalBarChart_wrap").style.display = '';
+                    document.querySelector('.barChart_3_wrap').classList.remove("col-sm-12");
+                    document.querySelector('.barChart_3_wrap').classList.add("col-sm-6");
+                    document.getElementById("barChart_3").classList.remove("barChart_fullHeight");
+                    document.getElementById("barChart_3").style.width = ""; 
+                    document.getElementById("barChart_3").style.height = "";
+                }
+            }).fail(function () {
+                console.error("Flow Failed");
+            });
+        }).fail(function () {
+            console.error("Flow Failed");
+        });
+    }
+    setInterval(() => {
+        isPrevModelHL && document.querySelector("#area_summary_table .table_AS")?.classList.add('d-none');
+        iscurrModelHL && document.querySelector("#area_summary_table_p .table_AS")?.classList.add('d-none');
+    }, 500);
+    function updateTypeLabels(data, data1) {
+        const elements = [
+            { selector: '.TypeLable_c', type: data.exi_schedule_type },
+            { selector: '.TypeLable_p', type: data1.exi_schedule_type }
+        ];
+
+        elements.forEach(({ selector, type }) => {
+            const el = document.querySelector(selector);
+            if (el) {
+                el.classList.remove("HighTypeLable", "detailTypeLable");
+                el.classList.add(type === 1 || type === 3 ? "HighTypeLable" : "detailTypeLable");
+            }
+        });
+    }
+
+    function getNIAandLandLordData() {
+        document.querySelectorAll(".table_AS").forEach(row => {
+            row.classList.add("d-none");
+        })
+        var _url = "/_api/cloudflow/v1.0/trigger/" + '{{ACCGsFlowId.results.entities.first.mspp_value}}';
+        var data = {};
+        let urlParams = new URLSearchParams(window.location.search);
+        data["areaScheduleId"] = urlParams.get('area_schedule');
+        data["buildingId"] = '{{request.params.id}}';
+        var payload = {};
+        payload.eventData = JSON.stringify(data);
+        shell.ajaxSafePost({
+            type: "POST",
+            contentType: "application/json",
+            url: _url,
+            data: JSON.stringify(payload),
+            processData: false,
+            global: false,
+        }).done(function (response) {
+            const result = JSON.parse(response);
+            data = JSON.parse(result.returndata);
+            var data1 = {};
+            data1["areaScheduleId"] = sessionStorage.getItem("area_schedule_previous");
+            data1["buildingId"] = '{{request.params.id}}';
+            var payload1 = {};
+            payload1.eventData = JSON.stringify(data1);
+            shell.ajaxSafePost({
+                type: "POST",
+                contentType: "application/json",
+                url: _url,
+                data: JSON.stringify(payload1),
+                processData: false,
+                global: false,
+            }).done(function (response) {
+                const result1 = JSON.parse(response);
+                data1 = JSON.parse(result1.returndata);
+                createAreaScheduleTable(data1, "tableBody", "area_summary_table", "headerRow", "unitsRow");
+                createAreaScheduleTable(data, "tableBody_p", "area_summary_table_p", "headerRow_p", "unitsRow_p");
+                createDeltaTable();
+                hideColumns2();
+                const resultsss = subtractObjects(processData(data), processData(data1));
+                const orderedResult = extractAndOrderData(resultsss, []);
+                gnL_barChart(orderedResult.niaValues.concat(orderedResult.landlordValues), orderedResult.niaLabels.concat(orderedResult.landlordLabels), orderedResult.niaLabels.length, orderedResult.landlordLabels.length, localStorage.getItem("convertToMeterSq") == 'true' ? true : false);
+                DataforGnL = orderedResult.niaValues.concat(orderedResult.landlordValues);
+                LabelsforGnL = orderedResult.niaLabels.concat(orderedResult.landlordLabels);
+                niaLengthforGnL = orderedResult.niaLabels.length;
+                LandlordLengthforGnL = orderedResult.landlordLabels.length;
+                const dataDict = data.reduce((acc, item) => {
+                    acc[item.exi_floor_name] = item;
+                    return acc;
+                }, {});
+                const data1Dict = data1.reduce((acc, item) => {
+                    acc[item.exi_floor_name] = item;
+                    return acc;
+                }, {});
+
+                const allFloors = new Set([...Object.keys(dataDict), ...Object.keys(data1Dict)]);
+                const grossInternalDiff = [];
+                const netInternalDiff = [];
+                const labels = [];
+                const diffResults = [];
+
+                allFloors.forEach(floor => {
+                    const dataFloor = dataDict[floor] || {};
+                    const data1Floor = data1Dict[floor] || {};
+                    const dataGross = dataFloor.exi_total_gross_internal_per_floor || 0;
+                    const data1Gross = data1Floor.exi_total_gross_internal_per_floor || 0;
+                    const dataNet = dataFloor.exi_total_net_internal_per_floor || 0;
+                    const data1Net = data1Floor.exi_total_net_internal_per_floor || 0;
+                    const grossDiff = dataGross - data1Gross;
+                    const netDiff = dataNet - data1Net;
+                    const exiOrder = dataFloor.exi_order || data1Floor.exi_order || 0;
+                    diffResults.push({ exiOrder, grossDiff, netDiff, floor });
+                });
+
+                diffResults.sort((a, b) => a.exiOrder - b.exiOrder);
+                diffResults.forEach(result => {
+                    grossInternalDiff.push(result.grossDiff);
+                    netInternalDiff.push(result.netDiff);
+                    labels.push(result.floor);
+                });
+
+                vert_barChart(labels, grossInternalDiff, netInternalDiff, localStorage.getItem("convertToMeterSq") == 'true' ? true : false);
+                labelsforFbFSplit = labels;
+                giaDataArrayforFbFSplit = grossInternalDiff;
+                niaDataArrayforFbFSplit = netInternalDiff;
+                document.getElementById('loader').style.display = 'none';
+                document.querySelectorAll(".table_AS").forEach(row => {
+                    row.classList.remove("d-none");
+                })
+            }).fail(function () {
+                console.error("Flow Failed");
+            });
+        }).fail(function () {
+            console.error("Flow Failed");
+        });
+    }
+
+    function subtractObjects(obj1, obj2) {
+        function subtractData(data1, data2) {
+            let result = {};
+            for (let key in data1) {
+                if (data2.hasOwnProperty(key)) {
+                    result[key] = data1[key] - data2[key];
+                } else {
+                    result[key] = data1[key];
+                }
+            }
+            for (let key in data2) {
+                if (!data1.hasOwnProperty(key)) {
+                    result[key] = -data2[key];
+                }
+            }
+            return result;
+        }
+        let result = {
+            niaData: subtractData(obj1.niaData, obj2.niaData),
+            landlordData: subtractData(obj1.landlordData, obj2.landlordData)
+        };
+        return result;
+    }
+
+    function extractAndOrderData(data, order) {
+        function getDataArray(data, order) {
+            let labels = [];
+            let values = [];
+            let additionalLabels = [];
+            let additionalValues = [];
+            order.forEach(key => {
+                if (data.hasOwnProperty(key)) {
+                    labels.push(key);
+                    values.push(data[key]);
+                }
+            });
+            for (let key in data) {
+                if (!order.includes(key)) {
+                    additionalLabels.push(key);
+                    additionalValues.push(data[key]);
+                }
+            }
+            return {
+                labels: labels.concat(additionalLabels),
+                values: values.concat(additionalValues)
+            };
+        }
+
+        const niaOrder = [
+            "Office", "Office Restricted", "Retail", "Other", "Dynamic NIA Areas",
+            "Storage", "Total net Internal"
+        ];
+        const landlordOrder = [
+            "Reception / Lobbies", "Circulation / Stairs", "Atrium Base / Bridge / Balconies",
+            "WC's / Showers / Changing", "Plant", "Back of House / FM", "Lifts / Risers",
+            "Structure", "Total Gross Internal", "Net to Gross"
+        ];
+        const niaData = getDataArray(data.niaData, niaOrder);
+        const landlordData = getDataArray(data.landlordData, landlordOrder);
+        return {
+            niaLabels: niaData.labels,
+            niaValues: niaData.values,
+            landlordLabels: landlordData.labels,
+            landlordValues: landlordData.values
+        };
+    }
+
+    let myChart;
+    function processData(areaScheduleData) {
+        var uniqueLabelsNIA = new Set();
+        var uniqueLabelsLandlord = new Set();
+        var valuesNIA = {};
+        var valuesLandlord = {};
+        var landLordSum = 0;
+
+        areaScheduleData.forEach(obj => {
+            obj.exi_floor_components_category_groups_floor_ex.forEach(item => {
+                if (item.exi_floorcomponentcategoryname_1 && typeof item.exi_floorcomponentcategoryoptionstype !== 'undefined') {
+                    if (item.exi_floorcomponentcategoryoptionstype === 1) {
+                        uniqueLabelsNIA.add(item.exi_floorcomponentcategoryname_1);
+                        if (!valuesNIA[item.exi_floorcomponentcategoryname_1]) {
+                            valuesNIA[item.exi_floorcomponentcategoryname_1] = 0;
+                        }
+                        valuesNIA[item.exi_floorcomponentcategoryname_1] += item.exi_categorytotal;
+                    } else if (item.exi_floorcomponentcategoryoptionstype === 2) {
+                        uniqueLabelsLandlord.add(item.exi_floorcomponentcategoryname_1);
+                        if (!valuesLandlord[item.exi_floorcomponentcategoryname_1]) {
+                            valuesLandlord[item.exi_floorcomponentcategoryname_1] = 0;
+                        }
+                        valuesLandlord[item.exi_floorcomponentcategoryname_1] += item.exi_categorytotal;
+                    }
+                    else if (item.exi_floorcomponentcategoryname_1 === 'Structure') {
+                        uniqueLabelsLandlord.add(item.exi_floorcomponentcategoryname_1);
+                        if (!valuesLandlord[item.exi_floorcomponentcategoryname_1]) {
+                            valuesLandlord[item.exi_floorcomponentcategoryname_1] = 0;
+                        }
+                        valuesLandlord[item.exi_floorcomponentcategoryname_1] += item.exi_categorytotal;
+                    }
+                }
+            });
+        });
+
+        uniqueLabelsNIA = Array.from(uniqueLabelsNIA);
+        uniqueLabelsLandlord = Array.from(uniqueLabelsLandlord);
+
+        function filterZeroValues(labels, values) {
+            let filteredLabels = [];
+            let filteredValues = [];
+            labels.forEach(label => {
+                if (values[label] !== 0) {
+                    filteredLabels.push(label);
+                    filteredValues.push(values[label]);
+                }
+            });
+            return { filteredLabels, filteredValues };
+        }
+
+        let filteredNIA = filterZeroValues(uniqueLabelsNIA, valuesNIA);
+        let filteredLandlord = filterZeroValues(uniqueLabelsLandlord, valuesLandlord);
+        uniqueLabelsNIA = filteredNIA.filteredLabels;
+        valuesNIA = filteredNIA.filteredValues;
+        uniqueLabelsLandlord = filteredLandlord.filteredLabels;
+        valuesLandlord = filteredLandlord.filteredValues;
+        let niaData = uniqueLabelsNIA.reduce((acc, label, index) => {
+            acc[label] = valuesNIA[index];
+            return acc;
+        }, {});
+        let landlordData = uniqueLabelsLandlord.reduce((acc, label, index) => {
+            acc[label] = valuesLandlord[index];
+            return acc;
+        }, {});
+        let dataToReturn = {
+            niaData: niaData,
+            landlordData: landlordData
+        }
+        return dataToReturn;
+    }
+
+    const conversionFactor = 0.092903;
+    function gnL_barChart(dataArray, labelsArray, countNIA, countLandLord, toMeterSq) {
+        let colors = [];
+        for (let i = 0; i < countNIA; i++) {
+            colors.push('#EC002B');
+        }
+        for (let i = 0; i < countLandLord; i++) {
+            colors.push('black');
+        }
+        const ctx_gnL = document.getElementById('gnl_myChart').getContext('2d');
+        if (myChart) {
+            myChart.destroy();
+        }
+        let unit = 'ft²';
+        if (toMeterSq) {
+            dataArray = dataArray.map(value => Math.round(value * conversionFactor));
+            unit = 'm²';
+        }
+        else {
+            dataArray = dataArray.map(value => Math.round(value));
+        }
+        const data = {
+            labels: labelsArray,
+            datasets: [{
+                label: 'Data',
+                data: dataArray,
+                backgroundColor: colors,
+                borderColor: colors,
+                borderWidth: 1,
+                barThickness: 30,
+            }]
+        };
+        const options = {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        font: {
+                            family: 'Mark W03 Light'
+                        }
+                    }
+                },
+                x: {
+                    ticks: {
+                        font: {
+                            family: 'Mark W03 Light'
+                        }
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false,
+                    labels: {
+                        font: {
+                            family: 'Mark W03 Light'
+                        }
+                    }
+                },
+                tooltip: {
+                    bodyFont: {
+                        family: 'Mark W03 Light'
+                    },
+                    titleFont: {
+                        family: 'Mark W03 Light'
+                    },
+                    callbacks: {
+                        label: function (tooltipItem) {
+                            return `Value: ${tooltipItem.raw} ${unit}`;
+                        }
+                    }
+                }
+            }
+        };
+
+        myChart = new Chart(ctx_gnL, {
+            type: 'bar',
+            data: data,
+            options: options
+        });
+    }
+
+    function areaComposition_doughnutChart_1(nia, landlord, label, toMeterSq) {
+        const ctx = document.getElementById('doughnutChart1').getContext('2d');
+        if (window.doughnutChart) {
+            window.doughnutChart.destroy();
+        }
+        let unit = 'ft²';
+        if (toMeterSq) {
+            nia = Math.round(nia * 0.092903);
+            landlord = Math.round(landlord * 0.092903);
+            unit = 'm²';
+        } else {
+            nia = Math.round(nia);
+            landlord = Math.round(landlord);
+        }
+        const data = {
+            labels: ['NIA', 'Landlord'],
+            datasets: [{
+                data: [nia, landlord],
+                backgroundColor: ['#EC002B', '#000000'],
+                borderColor: ['#EC002B', '#000000'],
+                borderWidth: 1
+            }]
+        };
+        const options = {
+            plugins: {
+                title: {
+                    display: true,
+                    text: "Area Composition - " + label,
+                    font: {
+                        family: 'Mark W03 Light'
+                    }
+                },
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: {
+                        usePointStyle: true,
+                        pointStyle: 'rect',
+                        font: {
+                            family: 'Mark W03 Light'
+                        }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: (context) => {
+                            let label = context.label || '';
+                            let value = context.raw || 0;
+                            let sum = context.dataset.data.reduce((a, b) => a + b, 0);
+                            let percentage = (value * 100 / sum).toFixed(2) + "%";
+                            return `${label}: ${percentage}`;
+                        }
+                    },
+                    bodyFont: {
+                        family: 'Mark W03 Light'
+                    },
+                    titleFont: {
+                        family: 'Mark W03 Light'
+                    }
+                },
+                datalabels: {
+                    formatter: (value) => {
+                        return value.toLocaleString();
+                    },
+                    color: '#fff',
+                    font: {
+                        family: 'Mark W03 Light',
+                        size: 16
+                    }
+                }
+            }
+        };
+        window.doughnutChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: data,
+            options: options,
+            plugins: [ChartDataLabels]
+        });
+    }
+
+    function areaComposition_doughnutChart_2(nia, landlord, label, toMeterSq) {
+        const ctx = document.getElementById('doughnutChart2').getContext('2d');
+        if (window.doughnutChart_c) {
+            window.doughnutChart_c.destroy();
+        }
+        let unit = 'ft²';
+        if (toMeterSq) {
+            nia = Math.round(nia * 0.092903);
+            landlord = Math.round(landlord * 0.092903);
+            unit = 'm²';
+        } else {
+            nia = Math.round(nia);
+            landlord = Math.round(landlord);
+        }
+        const data = {
+            labels: ['NIA', 'Landlord'],
+            datasets: [{
+                data: [nia, landlord],
+                backgroundColor: ['#EC002B', '#000000'],
+                borderColor: ['#EC002B', '#000000'],
+                borderWidth: 1
+            }]
+        };
+        const options = {
+            plugins: {
+                title: {
+                    display: true,
+                    text: "Area Composition - " + label,
+                    font: {
+                        family: 'Mark W03 Light'
+                    }
+                },
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: {
+                        usePointStyle: true,
+                        pointStyle: 'rect',
+                        font: {
+                            family: 'Mark W03 Light'
+                        }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: (context) => {
+                            let label = context.label || '';
+                            let value = context.raw || 0;
+                            let sum = context.dataset.data.reduce((a, b) => a + b, 0);
+                            let percentage = (value * 100 / sum).toFixed(2) + "%";
+                            return `${label}: ${percentage}`;
+                        }
+                    },
+                    bodyFont: {
+                        family: 'Mark W03 Light'
+                    },
+                    titleFont: {
+                        family: 'Mark W03 Light'
+                    }
+                },
+                datalabels: {
+                    formatter: (value) => {
+                        return value.toLocaleString();
+                    },
+                    color: '#fff',
+                    font: {
+                        family: 'Mark W03 Light',
+                        size: 16
+                    }
+                }
+            }
+        };
+        window.doughnutChart_c = new Chart(ctx, {
+            type: 'doughnut',
+            data: data,
+            options: options,
+            plugins: [ChartDataLabels]
+        });
+    }
+
+    let barChart_3;
+    function areaSummary_gnl(stage2, stage1, nia2, nia1, gia2, gia1, toMeterSq) {
+        const ctx = document.getElementById('barChart_3').getContext('2d');
+        if (barChart_3) {
+            barChart_3.destroy();
+        }
+        let unit = 'ft²';
+        if (toMeterSq) {
+            nia2 = Math.round(nia2 * 0.092903);
+            nia1 = Math.round(nia1 * 0.092903);
+            gia2 = Math.round(gia2 * 0.092903);
+            gia1 = Math.round(gia1 * 0.092903);
+            unit = 'm²';
+        }
+        const data = {
+            labels: ['NIA', 'GIA'],
+            datasets: [
+                {
+                    label: stage1,
+                    data: [nia1, gia1],
+                    backgroundColor: '#a7a8aa',
+                    barThickness: 30
+                },
+                {
+                    label: stage2,
+                    data: [nia2, gia2],
+                    backgroundColor: '#75226c',
+                    barThickness: 30
+                }
+            ]
+        };
+        const options = {
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Comparison of NIA and GIA',
+
+                    font: {
+                        family: 'Mark W03 Light'
+                    }
+                },
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: {
+                        usePointStyle: true,
+                        pointStyle: 'rect',
+                        font: {
+                            family: 'Mark W03 Light'
+                        }
+                    }
+                },
+                tooltip: {
+                    bodyFont: {
+                        family: 'Mark W03 Light'
+                    },
+                    titleFont: {
+                        family: 'Mark W03 Light'
+                    },
+                    callbacks: {
+                        label: function (tooltipItem) {
+                            const value = Math.round(tooltipItem.raw).toLocaleString(); // Round and format with thousand commas
+                            return `Value: ${value} ${unit}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Area (' + unit + ')',
+                        font: {
+                            family: 'Mark W03 Light'
+                        }
+                    },
+                    ticks: {
+                        font: {
+                            family: 'Mark W03 Light'
+                        }
+                    }
+                },
+                x: {
+                    ticks: {
+                        font: {
+                            family: 'Mark W03 Light'
+                        }
+                    }
+                }
+            }
+        };
+        barChart_3 = new Chart(ctx, {
+            type: 'bar',
+            data: data,
+            options: options
+        });
+    }
+
+    let horizontalBarChartInstance;
+    function vert_barChart(labels, giaDataArray, niaDataArray, toMeterSq) {
+        const ctx = document.getElementById('horizontalBarChart').getContext('2d');
+        if (horizontalBarChartInstance) {
+            horizontalBarChartInstance.destroy();
+        }
+        let unit = 'ft²';
+        if (toMeterSq) {
+            giaDataArray = giaDataArray.map(value => Math.round(value * conversionFactor));
+            niaDataArray = niaDataArray.map(value => Math.round(value * conversionFactor));
+            unit = 'm²';
+        }
+        const data = {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'GIA',
+                    data: giaDataArray,
+                    backgroundColor: '#000000',
+                    barThickness: 15
+                },
+                {
+                    label: 'NIA',
+                    data: niaDataArray,
+                    backgroundColor: '#EC002B',
+                    barThickness: 15
+                }
+            ]
+        };
+        const options = {
+            responsive: true,
+            maintainAspectRatio: false,
+            indexAxis: 'y',
+            plugins: {
+                title: {
+                    display: true,
+                    text: ['Comparison of NIA and GIA', '(floor by floor split)'],
+                    font: {
+                        family: 'Mark W03 Light'
+                    }
+                },
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: {
+                        usePointStyle: true,
+                        pointStyle: 'rect',
+                        font: {
+                            family: 'Mark W03 Light'
+                        }
+                    }
+                },
+                tooltip: {
+                    bodyFont: {
+                        family: 'Mark W03 Light'
+                    },
+                    titleFont: {
+                        family: 'Mark W03 Light'
+                    },
+                    callbacks: {
+                        label: function (tooltipItem) {
+                            return `Value: ${tooltipItem.raw} ${unit}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Area reconciliation - gain/(loss) ' + unit,
+                        color: '#E30022',
+                        font: {
+                            family: 'Mark W03 Light'
+                        }
+                    },
+                    ticks: {
+                        color: '#E30022',
+                        font: {
+                            family: 'Mark W03 Light'
+                        },
+                        callback: function (value) {
+                            return value.toLocaleString();
+                        }
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Floor Levels',
+                        font: {
+                            family: 'Mark W03 Light'
+                        }
+                    },
+                    ticks: {
+                        font: {
+                            family: 'Mark W03 Light'
+                        }
+                    }
+                }
+            }
+        };
+        horizontalBarChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: data,
+            options: options
+        });
+    }
+
+    const deltaTableData = {};
+    const floorArray = [{ floorName: "SubB", order: 1 }, { floorName: "B3", order: 2 }, { floorName: "B2", order: 3 },
+    { floorName: "B1", order: 4 }, { floorName: "B", order: 5 }, { floorName: "LG", order: 6 },
+    { floorName: "G", order: 7 }, { floorName: "UG", order: 8 }];
+    const predefinedCategories = [
+        'Office', 'Office Restricted', 'Retail', 'Other', 'Storage', 'totalNetInternal',
+        'Reception / Lobbies', 'Circulation / Stairs', 'Atrium Base / Balcony / Bridge',
+        "WC's / Showers / Changing",
+        'Plant', 'Back of House / FM', 'Lifts / Risers', 'Structure'
+    ];
+    const extraColumns = ['totalGrossInternal', 'netToGross'];
+    let allCategories = [...predefinedCategories];
+
+    const tablesTotalNIA = {};
+    function formatNumber(value) {
+        return Math.round(value).toLocaleString();
+    }
+
+    function formatNumberAsInt(value) {
+        if (value) {
+            return Math.round(value);
+        } else {
+            return '-';
+        }
+    }
+
+    function createAreaScheduleTable(areaScheduleData, tableBodyId, tableId, tableHeaderRowId, tableUnitsRowId) {
+        function getTotalRowAsObject() {
+            const table1 = document.querySelector('.table');
+            const headers1 = Array.from(table1.querySelectorAll('thead th')).map(th => th.textContent.trim());
+            const lastRowCells = Array.from(table1.querySelectorAll('tbody tr:last-child td')).map(td => td.textContent.trim().replace(/,/g, ''));
+            const totals_t = {};
+            headers1.forEach((header, index) => {
+                const value = lastRowCells[index];
+                totals_t[header] = isNaN(value) ? value : parseFloat(value);
+            });
+
+            return totals_t;
+        }
+
+        const categoryDisplayNames = {
+            'Office': 'Office',
+            'Retail': 'Retail',
+            'totalNetInternal': 'Total NIA',
+            'Atrium Base / Balcony / Bridge': 'Atrium Base / Balcony / Bridge',
+            'Reception / Lobbies': 'Reception / Lobbies',
+            'Plant': 'Plant',
+            'Back of House / FM': 'Back of House / FM',
+            'Lifts / Risers': 'Lifts / Risers',
+            'Structure': 'Structure',
+            'totalGrossInternal': 'Total GIA',
+            'netToGross': 'Net:Gross'
+        };
+
+        let dynamicCategories = [];
+        const categoryIndices = {};
+        function getCategoryIndex(category, categoryType) {
+            if (categoryType === 1) {
+                if (!(category in categoryIndices)) {
+                    let index = predefinedCategories.indexOf(category);
+                    if (index === -1) {
+                        index = 4;
+                        allCategories.splice(index, 0, category);
+                        dynamicCategories.push(category);
+                    }
+                    categoryIndices[category] = index;
+                }
+            }
+            return categoryIndices[category];
+        }
+        const dataArray = [];
+        for (let i = 0; i < areaScheduleData.length; i++) {
+            const row = { level: areaScheduleData[i].exi_floor_name };
+            row.masterFloorID = areaScheduleData[i].exi_masterfloorid;
+            const isFloorExist = floorArray.find(s => s.floorName == row.level);
+            if (isFloorExist) {
+                if (tableId != "tableBody") {
+                    const index = floorArray.indexOf(isFloorExist);
+                    isFloorExist.masterFloorID_A = areaScheduleData[i].exi_masterfloorid;
+                    floorArray[index] = isFloorExist;
+                }
+                else {
+                    const index = floorArray.indexOf(isFloorExist);
+                    isFloorExist.masterFloorID_B = areaScheduleData[i].exi_masterfloorid;
+                    floorArray[index] = isFloorExist;
+                }
+            } else {
+                if (tableId == "tableBody") {
+                  
+                    floorArray.push({ masterFloorID_A: areaScheduleData[i].exi_masterfloorid, floorName: row.level, order: (areaScheduleData[i].exi_order) + 8 });
+                }
+                else {
+                    floorArray.push({ masterFloorID_B: areaScheduleData[i].exi_masterfloorid, floorName: row.level, order: (areaScheduleData[i].exi_order) + 8 });
+                }
+            }
+            for (let j = 0; j < areaScheduleData[i].exi_floor_components_category_groups_floor_ex.length; j++) {
+                const component = areaScheduleData[i].exi_floor_components_category_groups_floor_ex[j];
+                const index = getCategoryIndex(component.exi_floorcomponentcategoryname_1, component.exi_floorcomponentcategoryoptionstype);
+                row[component.exi_floorcomponentcategoryname_1] = component.exi_categorytotal;
+            }
+            console.log({floorArray,i});
+            row.totalNetInternal = areaScheduleData[i].exi_total_net_internal_per_floor;
+            row.totalGrossInternal = areaScheduleData[i].exi_total_gross_internal_per_floor;
+            row.netToGross = areaScheduleData[i].exi_net_to_gross_per_floor;
+            dataArray.push(row);
+        }
+        const conversionFactor = 10.7639;
+        let isMetric = localStorage.getItem("convertToMeterSq") == 'true' ? true : false;
+        let selectedRows = [];
+        allCategories = [... new Set(allCategories)];
+        function createHeader() {
+            const headerRow = document.getElementById(tableHeaderRowId);
+            const unitsRow = document.getElementById(tableUnitsRowId);
+            while (headerRow.children.length > 1) {
+                headerRow.removeChild(headerRow.lastChild);
+            }
+            while (unitsRow.children.length > 1) {
+                unitsRow.removeChild(unitsRow.lastChild);
+            }
+            allCategories.forEach(category => {
+                const headerCell = document.createElement('th');
+                headerCell.innerHTML = categoryDisplayNames[category] || category;
+                const className = formatCategory(category);
+                headerCell.classList.add(className);
+                headerRow.appendChild(headerCell);
+                const unitCell = document.createElement('th');
+                unitCell.innerHTML = category === 'netToGross' ? '%' : isMetric ? 'm<sup>2</sup>' : 'ft<sup>2</sup>';
+                unitsRow.appendChild(unitCell);
+            });
+            extraColumns.forEach(column => {
+                const headerCell = document.createElement('th');
+                headerCell.innerHTML = categoryDisplayNames[column] || column;
+                const className = formatCategory(column);
+                headerCell.classList.add(className);
+                headerRow.appendChild(headerCell);
+                const unitCell = document.createElement('th');
+                unitCell.innerHTML = column === 'netToGross' ? '%' : isMetric ? 'm<sup>2</sup>' : 'ft<sup>2</sup>';
+                unitsRow.appendChild(unitCell);
+            });
+        }
+
+        function populateTable() {
+            if (tableBodyId == 'tableBody' && isPrevModelHL) { return }
+            if (tableBodyId == 'tableBody_p' && iscurrModelHL) { return }
+            if (tableBodyId == 'tableBody') {
+                ntgAreaSchedule = previousNTG;
+                giaAreaSchedule = previousGIA;
+                niaAreaSchedule = previousNIA;
+            }
+            else {
+                ntgAreaSchedule = currentNTG;
+                giaAreaSchedule = currentGIA;
+                niaAreaSchedule = currentNIA;
+            }
+
+            createHeader();
+
+            const tableBody = document.getElementById(tableBodyId);
+            tableBody.innerHTML = '';
+            let totals = new Array(allCategories.length + extraColumns.length + 1).fill(0);
+            const totalFormatted = [];
+            let grossInternalSum = 0;
+            let netInternalSum = 0;
+            dataArray.forEach((item, index) => {
+                const row = document.createElement('tr');
+                row.id = 'row-' + index;
+                const levelCell = document.createElement('td');
+                levelCell.textContent = item.level;
+                levelCell.classList.add("floor");
+                row.appendChild(levelCell);
+                deltaTableData[tableBodyId] = { ...deltaTableData[[tableBodyId]], [item.level]: [] };
+                allCategories.forEach((category, colIndex) => {
+                    if (category == "totalNetInternal") {
+                        netInternalSum += item[category] || 0;
+                    }
+                    const value = item[category] || 0;
+                    const cell = document.createElement('td');
+                    cell.classList.add(formatCategory(category));
+                    cell.dataset.value = value;
+                    const formattedNumber = formatNumber(value);
+                    cell.textContent = formattedNumber;
+                    deltaTableData[tableBodyId][item.level].push({ key: category, value })
+                    row.appendChild(cell);
+                    totalFormatted.push({ key: category, value });
+                    if (category === 'totalNetInternal') {
+                        totals[colIndex + 1] = toggleUnits.checked ? convertArea(niaAreaSchedule, true) : niaAreaSchedule;
+                    }
+                    else if (!isNaN(value)) {
+                        totals[colIndex + 1] += value;
+                    }
+                });
+
+                extraColumns.forEach((column, colIndex) => {
+                    let value = item[column] || 0;
+                    const cell = document.createElement('td');
+                    const formattedNumber = formatNumber(value);
+                    cell.innerHTML = formattedNumber;
+                    cell.dataset.value = value;
+
+                    if (column === 'totalGrossInternal') {
+                        grossInternalSum += value;
+                    }
+                    if (column === 'netToGross') {
+                        value = (((item.totalNetInternal || 0) / (item.totalGrossInternal || 1)) * 100);
+                        cell.textContent = value.toFixed(2);
+                        deltaTableData[tableBodyId][item.level].push({ key: column, value })
+                    } else {
+                        deltaTableData[tableBodyId][item.level].push({ key: column, value })
+                    }
+                    cell.classList.add(formatCategory(column));
+                    row.appendChild(cell);
+                    if (column === 'totalGrossInternal') {
+                        totals[allCategories.length + colIndex + 1] = toggleUnits.checked ? convertArea(giaAreaSchedule, true) : giaAreaSchedule;;
+                    }
+                    else if (column === 'netToGross') {
+                        totals[allCategories.length + colIndex + 1] = (ntgAreaSchedule * 100).toFixed(2) + ' %';
+                    }
+                    else if (!isNaN(value)) {
+                        totals[allCategories.length + colIndex + 1] += value;
+                    }
+                });
+                tableBody.appendChild(row);
+            });
+            const totalRow = document.createElement('tr');
+            totalRow.classList.add('fw-bold', 'total_tr');
+            totals.forEach((total, index) => {
+                const cell = document.createElement('td');
+                if (index === totals.length - 1) {
+                    let val = (netInternalSum / grossInternalSum)
+                    val_1 = val ? (val*100).toFixed(2) : '-';
+                    cell.textContent = val_1 + " %";
+                    tablesTotalNIA[tableBodyId] = val ? val*100 :'-';
+                } else {
+                    cell.textContent = index === 0 ? "Total" : formatNumber(total) == 0 ? '-' : formatNumber(total);
+                }
+                totalRow.appendChild(cell);
+            });
+
+            document.querySelectorAll("#" + tableBodyId + " tr").forEach(row => {
+                row.querySelectorAll("td").forEach((cell, index) => {
+                    if (index === 0) return;
+                    let textContent = cell.textContent;
+                    let numberValue = parseFloat(textContent.replace(/,/g, ''));
+                    if (!isNaN(numberValue)) {
+                        if (numberValue === 0) {
+                            cell.textContent = "-";
+                        } else {
+                            const lastColumnIndex = row.cells.length - 1;
+                            if (index === lastColumnIndex) {
+                                cell.textContent = numberValue.toFixed(2) + ' %';
+                            } else {
+                                if (Number.isInteger(numberValue)) {
+                                    let roundedValue = formatNumber(numberValue);
+                                    cell.textContent = roundedValue;
+                                } else {
+                                    cell.textContent = formatNumber(numberValue);
+                                }
+                            }
+                        }
+                    }
+                });
+            });
+
+            document.querySelectorAll("#" + tableBodyId + " tr.fw-bold td").forEach((cell, index) => {
+                if (index === 0) return;
+                let textContent = cell.textContent;
+                let numberValue = parseFloat(textContent.replace(/,/g, ''));
+                if (!isNaN(numberValue)) {
+                    if (numberValue === 0) {
+                        cell.textContent = "-";
+                    } else {
+                        let roundedValue = formatNumber(numberValue);
+                        cell.textContent = roundedValue;
+                    }
+                }
+            });
+
+            tableBody.appendChild(totalRow);
+            document.querySelectorAll('#' + tableBodyId + ' tr').forEach(row => {
+                row.setAttribute('title', 'Select a row to see the area breakdown');
+            });
+
+            const headerRow = document.getElementById(tableHeaderRowId);
+            const headers = headerRow.getElementsByTagName("th");
+            Array.from(headers).forEach(header => {
+                header.title = "Select a row to see the area breakdown";
+            });
+
+            if (isPrevModelHL && !iscurrModelHL) {
+                document.querySelectorAll("#tableBody_p tr:not(.total_tr)").forEach(row => row.style.display = "none");
+                document.getElementById("expandTblCurr").classList.remove('d-none');
+                document.getElementById("expandTblCurr").addEventListener("click", () => {
+                    document.getElementById("expandTblCurr").classList.add('d-none');
+                    document.getElementById("collapseTblCurr").classList.remove('d-none');
+                    document.querySelectorAll("#tableBody_p tr:not(.total_tr)").forEach(row => row.style.display = "");
+                });
+                document.getElementById("collapseTblCurr").addEventListener("click", () => {
+                    document.getElementById("collapseTblCurr").classList.add('d-none');
+                    document.getElementById("expandTblCurr").classList.remove('d-none');
+                    document.querySelectorAll("#tableBody_p tr:not(.total_tr)").forEach(row => row.style.display = "none");
+                });
+            }
+            if (iscurrModelHL && !isPrevModelHL) {
+                document.querySelectorAll("#tableBody tr:not(.total_tr)").forEach(row => row.style.display = "none");
+                document.getElementById("expandTblPrev").classList.remove('d-none');
+                document.getElementById("expandTblPrev").addEventListener("click", () => {
+                    document.getElementById("expandTblPrev").classList.add('d-none');
+                    document.getElementById("collapseTblPrev").classList.remove('d-none');
+                    document.querySelectorAll("#tableBody tr:not(.total_tr)").forEach(row => row.style.display = "");
+                });
+                document.getElementById("collapseTblPrev").addEventListener("click", () => {
+                    document.getElementById("collapseTblPrev").classList.add('d-none');
+                    document.getElementById("expandTblPrev").classList.remove('d-none');
+                    document.querySelectorAll("#tableBody tr:not(.total_tr)").forEach(row => row.style.display = "none");
+                });
+            }
+        }
+
+        function hideEmptyColumns(totals) {
+            totals.forEach((total, index) => {
+                const displayStyle = (index > 0 && total === 0) ? 'none' : '';
+                document.querySelectorAll(`th:nth-child(${index + 1}), td:nth-child(${index + 1})`).forEach(cell => {
+                    cell.style.display = displayStyle;
+                });
+            });
+        }
+
+        function handleRowSelection() {
+            let rows = [];
+            const selectedData = selectedRows.map(rowId => {
+                const rowIndex = parseInt(rowId.split('-')[1]);
+                return dataArray[rowIndex];
+            });
+            if (selectedRows.length === 1) {
+                rows.push(selectedData[0].level);
+
+            } else if (selectedRows.length > 1) {
+                const summedData = selectedData.reduce((acc, row) => {
+                    rows.push(row.level);
+                    Object.keys(row).forEach(key => {
+                        if (typeof row[key] === 'number') {
+                            acc[key] = (acc[key] || 0) + row[key];
+                        }
+                    });
+                    return acc;
+                }, {});
+            }
+        }
+        if (!isPrevModelHL) {
+            document.getElementById("viewTblPrev").classList.remove('d-none');
+        }
+        if (!iscurrModelHL) {
+            document.getElementById("viewTblCurr").classList.remove('d-none');
+        }
+        document.getElementById('toggleUnits').addEventListener('click', () => {
+            document.getElementById("collapseTblCurr").classList.add('d-none');
+            document.getElementById("collapseTblPrev").classList.add('d-none');
+            areaComposition_doughnutChart_1(niaDataforareaComposition1, LandLordDataforareaComposition1, labelforareaComposition1, toggleUnits.checked);
+            areaComposition_doughnutChart_2(niaDataforareaComposition2, LandLordDataforareaComposition2, labelforareaComposition2, toggleUnits.checked);
+            areaSummary_gnl(labelforareaComposition2, labelforareaComposition1, niaforGnL2, niaforGnL1, giaforGnL2, giaforGnL1, toggleUnits.checked);
+            gnL_barChart(DataforGnL, LabelsforGnL, niaLengthforGnL, LandlordLengthforGnL, toggleUnits.checked);
+            vert_barChart(labelsforFbFSplit, giaDataArrayforFbFSplit, niaDataArrayforFbFSplit, toggleUnits.checked);
+            let elements = document.querySelectorAll('[data-convertible]');
+            let unitElements = document.querySelectorAll('.unit');
+            elements.forEach(element => {
+                if (!element.dataset.originalValue) {
+                    element.dataset.originalValue = element.innerHTML.replace(/,/g, '');
+                }
+                let originalValue = parseFloat(element.dataset.originalValue);
+                let newValue = toggleUnits.checked ? convertArea(originalValue, true) : originalValue;
+                element.innerHTML = Math.round(newValue).toLocaleString();
+            });
+
+            unitElements.forEach(unitElement => {
+                unitElement.innerHTML = toggleUnits.checked ? 'm²' : 'ft²';
+            });
+
+            toggleUnits.checked ? localStorage.setItem("convertToMeterSq", true) : localStorage.setItem("convertToMeterSq", false);
+            isMetric = !isMetric;
+            const unitCells = document.querySelectorAll('#' + tableUnitsRowId + ' th:not(:first-child)');
+            unitCells.forEach((cell, index) => {
+                if (!cell.innerHTML.includes('%')) {
+                    cell.innerHTML = isMetric ? 'm<sup>2</sup>' : 'ft<sup>2</sup>';
+                }
+            });
+            dataArray.forEach(data => {
+                Object.keys(data).forEach(key => {
+                    if (typeof data[key] === 'number' && key !== 'netToGross') {
+                        data[key] = isMetric ? data[key] / conversionFactor : data[key] * conversionFactor;
+                    }
+                });
+            });
+
+            populateTable();
+            let currentGIAConverted = (parseFloat(currentGIA) * (toggleUnits.checked ? 0.09290304 : 1)).toFixed(8);
+            let previousGIAConverted = (parseFloat(previousGIA) * (toggleUnits.checked ? 0.09290304 : 1)).toFixed(8);
+            if (tableBodyId == "tableBody_p") {
+                addLastRow("tableBody_p", currentGIAConverted);
+            }
+            else {
+                addLastRow("tableBody", previousGIAConverted);
+            }
+            ExpandTable(tableId);
+            if (deltaTable) {
+                document.querySelector(".closeexpandtabled_d").click();
+                createDeltaTable();
+                document.querySelector(".expand_delta").click();
+            }
+            else {
+                createDeltaTable();
+            }
+
+            if (deltaTable) {
+                hideColumns();
+                hideColumns1();
+            }
+            else if (currentTable) {
+                hideColumns1();
+                hideColumns2();
+            }
+            else if (previousTable) {
+                hideColumns();
+                hideColumns2();
+            }
+            else {
+                hideColumns();
+                hideColumns1();
+                hideColumns2();
+            }
+        });
+
+        function convertValues() {
+            const unitCells = document.querySelectorAll('#' + tableUnitsRowId + ' th:not(:first-child)');
+            unitCells.forEach((cell, index) => {
+                if (!cell.innerHTML.includes('%')) {
+                    cell.innerHTML = isMetric ? 'm<sup>2</sup>' : 'ft<sup>2</sup>';
+                }
+            });
+            dataArray.forEach(data => {
+                Object.keys(data).forEach(key => {
+                    if (typeof data[key] === 'number' && key !== 'netToGross') {
+                        data[key] = isMetric ? data[key] / conversionFactor : data[key] * conversionFactor;
+                    }
+                });
+            });
+            populateTable();
+            if (tableBodyId == "tableBody_p") {
+                addLastRow("tableBody_p", currentGIA);
+            }
+            else {
+                addLastRow("tableBody", previousGIA);
+            }
+            hideColumns();
+            hideColumns1();
+            hideColumns2();
+        }
+
+        function convertValues1() {
+            let elements = document.querySelectorAll('[data-convertible]');
+            let unitElements = document.querySelectorAll('.unit');
+            elements.forEach(element => {
+                if (!element.dataset.originalValue) {
+                    element.dataset.originalValue = element.innerHTML.replace(/,/g, '');
+                }
+                let originalValue = parseFloat(element.dataset.originalValue);
+                let newValue = toggleUnits.checked ? convertArea(originalValue, true) : originalValue;
+                element.innerHTML = Math.round(newValue).toLocaleString();
+            });
+
+            unitElements.forEach(unitElement => {
+                unitElement.innerHTML = toggleUnits.checked ? 'm²' : 'ft²';
+            });
+        }
+
+        localStorage.getItem("convertToMeterSq") == 'true' ? toggleUnits.checked = true : toggleUnits.checked = false;
+        if (localStorage.getItem("convertToMeterSq") == 'true') {
+            convertValues();
+            convertValues1();
+        }
+        populateTable();
+        let currentGIAConverted = (parseFloat(currentGIA) * (toggleUnits.checked ? 0.09290304 : 1)).toFixed(8);
+        let previousGIAConverted = (parseFloat(previousGIA) * (toggleUnits.checked ? 0.09290304 : 1)).toFixed(8);
+        if (tableBodyId == "tableBody_p") {
+            addLastRow("tableBody_p", currentGIAConverted);
+        }
+        else {
+            addLastRow("tableBody", previousGIAConverted);
+        }
+        hideColumns();
+        hideColumns1();
+        hideColumns2();
+    }
+
+    function hideColumns() {
+        const table = document.querySelector('#area_summary_table_p .table_AS');
+        const headers = table.querySelectorAll('th');
+        const tbodyID = document.querySelector('#area_summary_table_p .table_AS').querySelector('tbody').id;
+        if (document.getElementById('gia-row' + tbodyID)) document.getElementById('gia-row' + tbodyID).style.display = 'none';
+        const columnsToShow = ["Floor", "Total NIA", "Total GIA", "Net:Gross"];
+        let columnsToHide = [];
+        headers.forEach((header, index) => {
+            const headerTitle = header.innerText.trim();
+            if (!columnsToShow.includes(headerTitle)) {
+                columnsToHide.push(index);
+            }
+        });
+        const rows = table.querySelectorAll('tr');
+        rows.forEach(row => {
+            columnsToHide.forEach(index => {
+                if (row.cells[index]) {
+                    row.cells[index].style.display = 'none';
+                }
+            });
+        });
+    }
+
+    function hideColumns1() {
+        const table = document.querySelector('#area_summary_table .table_AS');
+        const headers = table.querySelectorAll('th');
+        const tbodyID = document.querySelector('#area_summary_table .table_AS').querySelector('tbody').id;
+        if (document.getElementById('gia-row' + tbodyID)) document.getElementById('gia-row' + tbodyID).style.display = 'none';
+        const columnsToShow = ["Floor", "Total NIA", "Total GIA", "Net:Gross"];
+        let columnsToHide = [];
+        headers.forEach((header, index) => {
+            const headerTitle = header.innerText.trim();
+            if (!columnsToShow.includes(headerTitle)) {
+                columnsToHide.push(index);
+            }
+        });
+        const rows = table.querySelectorAll('tr');
+        rows.forEach(row => {
+            columnsToHide.forEach(index => {
+                if (row.cells[index]) {
+                    row.cells[index].style.display = 'none';
+                }
+            });
+        });
+    }
+
+    function hideColumns2() {
+        const table = document.querySelector('#area_summary_table_d .table_AS');
+        if (!table) return;
+
+        const headers = table.querySelectorAll('th');
+        const columnsToShow = ["floor", "totalnetinternal", "totalgrossinternal", "nettogross"];
+        let columnsToHide = [];
+        headers.forEach((header, index) => {
+            const headerClass = header.className.trim();
+            if (!columnsToShow.some(column => headerClass.includes(column))) {
+                columnsToHide.push(index);
+            }
+        });
+
+        const rows = table.querySelectorAll('tr');
+        rows.forEach(row => {
+            columnsToHide.forEach(index => {
+                if (row.cells[index]) {
+                    row.cells[index].style.display = 'none';
+                }
+            });
+        });
+
+        columnsToShow.forEach(column => {
+            [...document.getElementsByClassName(column)].forEach(td => {
+                td.style.display = "table-cell";
+            });
+        });
+    }
+
+    function hideAfterExpand(tableId) {
+        const table = document.querySelector('#' + tableId + ' .table_AS');
+        const headers = table.querySelectorAll('th');
+        const columnsToShow = ["Floor", "Total NIA", "Total GIA", "Net:Gross"];
+        let columnsToHide = [];
+        headers.forEach((header, index) => {
+            const headerTitle = header.innerText.trim();
+            if (!columnsToShow.includes(headerTitle)) {
+                columnsToHide.push(index);
+            }
+        });
+        const rows = table.querySelectorAll('tr');
+        rows.forEach(row => {
+            columnsToHide.forEach(index => {
+                if (row.cells[index]) {
+                    row.cells[index].style.display = 'none';
+                }
+            });
+        });
+    }
+
+    function formatDelta(value, isNetGross = false) {
+        if (value === 0) {
+            return '-';
+        } else if (value < 0) {
+            return `<span style="color: red;">(${Math.abs(value).toLocaleString(undefined, isNetGross ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : {})}${isNetGross ? ' %' : ''})</span>`;
+        }
+        return `${value.toLocaleString(undefined, isNetGross ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : {})}${isNetGross ? ' %' : ''}`;
+    }
+
+    function formatCategory(str) {
+        return str.toLowerCase().split('').map(char => (char === ' ' ? '_' : char)).filter(char => /[a-zA-Z0-9_]/.test(char)).join('');
+    }
+
+    function synchronizeArrays(arr1, arr2) {
+        const allLevels = new Set([
+            ...arr1.map(item => item.level),
+            ...arr2.map(item => item.level)
+        ]);
+        const template = {
+            ...arr1[0],
+            ...arr2[0]
+        };
+        const zeroTemplate = Object.keys(template).reduce((acc, key) => {
+            acc[key] = key === 'level' ? '' : typeof template[key] === 'number' ? 0 : null;
+            return acc;
+        }, {});
+        function fillMissingLevels(arr, allLevelsSet) {
+            const result = [...arr];
+            const existingLevels = new Set(arr.map(item => item.level));
+            for (const level of allLevelsSet) {
+                if (!existingLevels.has(level)) {
+                    const newItem = {
+                        ...zeroTemplate,
+                        level
+                    };
+                    result.push(newItem);
+                }
+            }
+            return result.sort((a, b) => {
+                const aNum = parseInt(a.level.replace(/\D/g, '')) || 0;
+                const bNum = parseInt(b.level.replace(/\D/g, '')) || 0;
+                if (aNum === bNum) {
+                    return a.level.localeCompare(b.level);
+                }
+                return aNum - bNum;
+            });
+        }
+        const syncedArr1 = fillMissingLevels(arr1, allLevels);
+        const syncedArr2 = fillMissingLevels(arr2, allLevels);
+        return {
+            tableB: syncedArr1,
+            tableA: syncedArr2
+        };
+    }
+
+    function checkTableAAndBLength() {
+        const tableB = $("#area_summary_table_p > table >tbody>tr>td.floor");
+        const tableA = $("#area_summary_table > table >tbody>tr>td.floor");
+        if (tableA.length === tableB.length) {
+            return { both: tableA.length, order: tableA.toArray().map(s => s.innerText).join(",") }
+        }
+        if (tableA.length > tableB.length) {
+            return {
+                tableA: tableA.length,
+                order: tableA.toArray().map(s => s.innerText).join(",")
+            }
+        }
+        if (tableA.length < tableB.length) {
+            return {
+                tableB: tableB.length,
+                order: tableB.toArray().map(s => s.innerText).join(",")
+            }
+        }
+    }
+
+    function createDeltaTable() {
+        var table1 = document.getElementById("area_summary_table");
+        var table2 = document.getElementById("area_summary_table_p");
+        var deltaTable = document.getElementById("area_summary_table_d");
+        var deltaTableHead = deltaTable.querySelector("thead");
+        var deltaTableBody = deltaTable.querySelector("tbody");
+        deltaTableHead.innerHTML = '';
+        deltaTableBody.innerHTML = '';
+        const totals = new Array(allCategories.length + extraColumns.length + 1).fill(0);;
+        let netInternalSum = 0;
+        let grossInternalSum = 0;
+        const totalSum = {};
+        if (Object.keys(deltaTableData).length > 1) {
+            const totalRow = deltaTableBody.insertRow(-1);
+            totalRow.classList.add('fw-bold');
+            const totalCell = document.createElement('td');
+            totalCell.innerHTML = "Total";
+            totalRow.append(totalCell);
+            [... new Set(allCategories)].forEach(category => {
+                const itemCell = document.createElement('td');
+                itemCell.classList.add(`total_${formatCategory(category)}`);
+                itemCell.classList.add(`${formatCategory(category)}`);
+                itemCell.style.display = "none";
+                totalRow.appendChild(itemCell);
+            });
+            extraColumns.forEach((column) => {
+                const itemCell = document.createElement('td');
+                itemCell.classList.add(`total_${formatCategory(column)}`);
+                itemCell.classList.add(`${formatCategory(column)}`);
+                itemCell.style.display = "none";
+                totalRow.appendChild(itemCell);
+            });
+            deltaTableBody.append(totalRow);
+            const total = {};
+            const tr = document.createElement('tr');
+            const floorTH = document.createElement("th");
+            floorTH.classList.add("floor");
+            floorTH.innerHTML = "Floor";
+            tr.appendChild(floorTH);
+            floorArray.sort((a, b) => a.order - b.order).forEach((seq, i) => {
+                let isMezz = false, isMezzA = false, isMezzB = false;
+                if (seq.masterFloorID_A == 'Mezz' && seq.masterFloorID_B == 'Mezz') {
+                    isMezz = true;
+                }
+                else if (seq.masterFloorID_B == 'Mezz') {
+                  debugger
+                    isMezzB = true;
+                }
+                else if (seq.masterFloorID_A == 'Mezz') {
+                  debugger
+                    isMezzA = true;
+                }
+
+                const tableA = deltaTableData.tableBody;
+                const tableB = deltaTableData.tableBody_p;
+                const tableAData = tableA[seq.floorName];
+                const tableBData = tableB[seq.floorName];
+                if (tableAData || tableBData) {
+                    const row = document.createElement('tr');
+                    row.title = "Select a row to see the area breakdown";
+                    row.id = 'row-' + i;
+                    row.classList.add("delta_row");
+                    const levelCell = document.createElement('td');
+                    let floorNameCellVal = "";
+                    if (isMezzB) {
+                        floorNameCellVal = seq.floorName + " - Current";
+                    }
+                    else if (isMezzA) {
+                        floorNameCellVal = seq.floorName + " - Previous";
+                    }
+                    else {
+                        floorNameCellVal = seq.floorName;
+                    }
+                    levelCell.textContent = floorNameCellVal;
+                    row.appendChild(levelCell);
+                    [... new Set(allCategories)].forEach((category, colIndex) => {
+                        try {
+                            const tableACategory = tableAData?.find(s => s.key === category);
+                            const tableBCategory = tableBData?.find(s => s.key === category);
+                            const isDeltaTH = document.getElementsByClassName(`delta_${formatCategory(category)}`);
+                            if (isDeltaTH.length === 0) {
+                                const th = document.createElement('th');
+                                th.classList.add(formatCategory(category));
+                                th.classList.add(`delta_${formatCategory(category)}`);
+                                if (category === 'totalNetInternal') {
+                                    th.innerHTML = 'Total NIA';
+                                }
+                                else {
+                                    th.innerHTML = category;
+                                }
+                                tr.appendChild(th);
+                                deltaTableHead.appendChild(tr);
+                            }
+
+                            let value = 0;
+                            if (isMezz) {
+                                value = ((tableBCategory && tableBCategory.value) || 0) - ((tableACategory && tableACategory.value) || 0);
+                            }
+
+                            if (isMezzB) {
+                                value = ((tableBCategory && tableBCategory.value) || 0);
+                            }
+
+                            if (isMezzA) {
+                                value = -((tableACategory && tableACategory.value) || 0);
+                            }
+
+                            if (!isMezz && !isMezzA && !isMezzB) {
+                                value = ((tableBCategory && tableBCategory.value) || 0) - ((tableACategory && tableACategory.value) || 0)
+
+                            }
+
+                            const cell = document.createElement('td');
+                            const formattedNumber = formatDelta(category !== "netToGross" ? formatNumberAsInt(value) : value);
+                            cell.classList.add(formatCategory(category));
+                            cell.dataset.value = category !== "netToGross" ? formatNumberAsInt(value) : value;
+                            cell.innerHTML = formattedNumber;
+                            cell.style.display = "none";
+                            row.appendChild(cell);
+                            if (total[formatCategory(category)]) {
+                                total[formatCategory(category)] += value
+                            } else {
+                                total[formatCategory(category)] = value;
+                            }
+                        } catch (error) {
+                            console.error(error);
+                        }
+                    });
+                    extraColumns.forEach((column, colIndex) => {
+                        const tableACategory = tableAData?.find(s => s.key === column);
+                        const tableBCategory = tableBData?.find(s => s.key === column);
+
+                        const isDeltaTH = document.getElementsByClassName(`delta_${formatCategory(column)}`);
+                        if (isDeltaTH.length === 0) {
+                            const th = document.createElement('th');
+                            th.classList.add(formatCategory(column));
+                            th.classList.add(`delta_${formatCategory(column)}`);
+                            if (column === 'totalGrossInternal') {
+                                th.innerHTML = 'Total GIA';
+                            }
+                            else if (column === 'netToGross') {
+                                th.innerHTML = 'Net:Gross';
+                            }
+                            else {
+                                th.innerHTML = column;
+                            }
+                            tr.appendChild(th);
+                            deltaTableHead.appendChild(tr);
+                        }
+                        let value = 0;
+                        if (isMezz) {
+                            value = ((tableBCategory && tableBCategory.value) || 0) - ((tableACategory && tableACategory.value) || 0);
+                        }
+
+                        if (isMezzB) {
+                            value = ((tableBCategory && tableBCategory.value) || 0);
+                        }
+
+                        if (isMezzA) {
+                            value = -((tableACategory && tableACategory.value) || 0);
+                        }
+
+                        if (!isMezz && !isMezzA && !isMezzB) {
+                            value = ((tableBCategory && tableBCategory.value) || 0) - ((tableACategory && tableACategory.value) || 0)
+                        }
+
+                        const cell = document.createElement('td');
+                        cell.classList.add(formatCategory(column));
+                        const formattedNumber = formatDelta(column !== "netToGross" ? formatNumberAsInt(value) : value, column === 'netToGross');
+                        cell.innerHTML = formattedNumber;
+                        cell.style.display = "table-cell";
+                        row.appendChild(cell);
+                        if (total[formatCategory(column)]) {
+                            total[formatCategory(column)] += value
+                        } else {
+                            total[formatCategory(column)] = value;
+                        }
+                    });
+                    deltaTableBody.append(row);
+                }
+            })
+            const unitsRow = document.createElement("tr");
+            unitsRow.id = "unitsRow";
+            document.querySelectorAll("#area_summary_table_d thead th").forEach((_, i, cols) => {
+                unitsRow.appendChild(Object.assign(document.createElement("th"), {
+                    innerHTML: i === 0 ? "" : i === cols.length - 1 ? "%" : toggleUnits.checked ? "<span>m<sup>2</sup></span>" : "<span>ft<sup>2</sup></span>"
+                }));
+            });
+            document.querySelector("#area_summary_table_d thead").appendChild(unitsRow);
+
+            for (const [key, value] of Object.entries(total)) {
+                if (key !== "nettogross") {
+                    if (key == 'totalnetinternal') {
+                        let niaDiff = toggleUnits.checked ? (convertArea(currentNIA, true) - convertArea(previousNIA, true)) : (currentNIA - previousNIA);
+                        $(`.total_${key}`).html(formatDelta(Math.round(niaDiff)));
+                    }
+                    else if (key == 'totalgrossinternal') {
+                        let giaDiff = toggleUnits.checked ? (convertArea(currentGIA, true) - convertArea(previousGIA, true)) : (currentGIA - previousGIA);
+                        $(`.total_${key}`).html(formatDelta(Math.round(giaDiff)));
+                    }
+                    else {
+                        $(`.total_${key}`).html(formatDelta(Math.round(value)));
+                    }
+                }
+            }
+            const tableANIA = tablesTotalNIA.tableBody;
+            const tableBNIA = tablesTotalNIA.tableBody_p;
+            $("#tableBody_d").append(($("#tableBody_d > tr")[0]))
+            $(".total_nettogross").html(formatDelta(parseFloat((currentNTG * 100 - previousNTG * 100).toFixed(2)), true));
+        }
+        return;
+
+        if (Object.keys(deltaTableData).length > 1) {
+            const arrays = synchronizeArrays(deltaTableData.tableBody_p, deltaTableData.tableBody);
+            const length = checkTableAAndBLength();
+            let maxLength = 0;
+            let parentTable = null;
+            let childTable = null;
+            if (length.tableA || length.both) {
+                maxLength = length.tableA;
+                parentTable = arrays.tableA;
+                childTable = arrays.tableB;
+            }
+            if (length.tableB) {
+                maxLength = length.tableB;
+                parentTable = arrays.tableB;
+                childTable = arrays.tableA;
+            }
+            for (let i = 0; i < maxLength; i++) {
+                const level = length.order.split(",")[i];
+                parentTable
+                const row = document.createElement('tr');
+                row.title = "Select a row to see the area breakdown";
+                row.id = 'row-' + i;
+                row.classList.add("delta_row");
+                const levelCell = document.createElement('td');
+                levelCell.textContent = level || "-";
+                row.appendChild(levelCell);
+                deltaTableBody.append(row);
+            }
+            const totalRow = document.createElement('tr');
+            totalRow.classList.add('fw-bold');
+            const totalCell = document.createElement('td');
+            totalCell.innerHTML = "Total";
+            totalRow.append(totalCell);
+            allCategories.forEach(category => {
+                const itemCell = document.createElement('td');
+                itemCell.innerHTML = totalSum[category];
+                itemCell.classList.add(formatCategory(category));
+                itemCell.style.display = "none";
+                totalRow.appendChild(itemCell);
+            });
+            extraColumns.forEach((column) => {
+                const itemCell = document.createElement('td');
+                itemCell.classList.add(formatCategory(column));
+                itemCell.innerHTML = formatDelta(parseFloat(totalSum[column].toFixed(2)), column === 'netToGross');
+                itemCell.style.display = "none";
+                totalRow.appendChild(itemCell);
+            });
+            deltaTableBody.append(totalRow);
+        }
+        return;
+
+        var tableBody1 = table1.getElementsByTagName("tbody")[0];
+        var tableBody2 = table2.getElementsByTagName("tbody")[0];
+        for (var i = 0; i < tableBody1.rows.length; i++) {
+            var row1 = tableBody1.rows[i];
+            var row2 = tableBody2.rows[i];
+            var newRow = document.createElement("tr");
+            newRow.title = "Select a row to see the area breakdown";
+            for (var j = 0; j < row1.cells.length; j++) {
+                var cell1 = null;
+                var cell2 = null;
+                try {
+                    if (row1) {
+                        cell1 = row1.cells[j];
+                    }
+                    if (row2) {
+                        cell2 = row2.cells[j];
+                    }
+                    var newCell = document.createElement("td");
+                    if (j === 0) {
+                        newCell.innerHTML = cell1 && cell1.innerHTML;
+                    } else {
+                        var value1 = cell1 === null ? 0 : (cell1.innerHTML === "-" ? 0 : parseFloat(cell1.innerHTML.replace(/,/g, "")));
+                        var value2 = cell2 === null ? 0 : cell2.innerHTML === "-" ? 0 : parseFloat(cell2.innerHTML.replace(/,/g, ""));
+                        var delta = value2 - value1;
+                        newCell.innerHTML = formatDelta(delta, j === row1.cells.length - 1);
+                    }
+                    newCell.style.display = "table-cell";
+                    newRow.appendChild(newCell);
+                } catch (error) {
+                    console.error(error);
+                }
+            }
+            deltaTableBody.appendChild(newRow);
+        }
+    }
+
+    function ExpandTable(tableId) {
+        $(`#${tableId}>table>tbody>tr>td`).attr("style", "table-cell");
+        $(`#${tableId}>table>thead>tr>th`).attr("style", "table-cell");
+        const table = document.querySelector(`#${tableId} .table_AS`);
+        const headers = table.querySelectorAll('thead tr th');
+        const rows = table.querySelectorAll('tbody tr');
+        const columnsToShow = ["Floor", "Total NIA", "Total GIA", "Net:Gross"];
+        let columnsToHide = [];
+
+        headers.forEach((header, index) => {
+            const headerTitle = header.innerText.trim();
+            if (!columnsToShow.includes(headerTitle)) {
+                columnsToHide.push(index);
+            }
+        });
+
+        rows.forEach(row => {
+            columnsToHide.forEach(index => {
+                if (row.cells[index]) {
+                    row.cells[index].style.display = 'table-cell';
+                }
+            });
+        });
+
+        let visibleColumns = new Array(headers.length).fill(false);
+        rows.forEach(row => {
+            row.querySelectorAll('td').forEach((cell, index) => {
+                const cellValue = cell.getAttribute('data-value') || cell.innerText.trim();
+                if (cellValue && cellValue !== "0" && cellValue !== "-") {
+                    visibleColumns[index] = true;
+                }
+            });
+        });
+
+        headers.forEach((header, index) => {
+            if (!visibleColumns[index]) {
+                header.classList.add('d-none');
+                rows.forEach(row => {
+                    const cell = row.querySelectorAll('td')[index];
+                    if (cell) {
+                        cell.classList.add('d-none');
+                    }
+                });
+            }
+            else {
+                header.classList.remove('d-none');
+                rows.forEach(row => {
+                    const cell = row.querySelectorAll('td')[index];
+                    if (cell) {
+                        cell.classList.remove('d-none');
+                    }
+                });
+            }
+        });
+        const headers_1 = table.querySelectorAll('thead tr:first-child th');
+        const headers_2 = table.querySelectorAll('thead tr:last-child th');
+
+        headers_1.forEach((header, index) => {
+            if (headers_2[index]) {
+                headers_2[index].classList.toggle('d-none', header.classList.contains('d-none'));
+            }
+        });
+    }
+
+    function hlTable() {
+        return `
+            <table class="table table_AS_hl border-1 table-striped">
+                <thead>
+                        <tr id="headerRow">
+                        <th class="floor" style="display: table-cell;">Floor</th>
+                        <th class="totalnetinternal" style="display: table-cell;">Total NIA</th>
+                        <th class="totalgrossinternal" style="display: table-cell;">Total GIA</th>
+                        <th class="nettogross" style="display: table-cell;">Net:Gross</th>
+                        </tr>
+                        <tr id="unitsRow">
+                        <th></th>
+                        <th>ft<sup>2</sup></th>
+                        <th>ft<sup>2</sup></th>
+                        <th>%</th>
+                        </tr>
+                </thead>
+                <tbody>
+                        <tr class="fw-bold total_tr">
+                        <td style="table-cell" id="hltotal_label">Total</td>
+                        <td style="table-cell" id="hlnia" data-convertible></td>
+                        <td style="table-cell" id="hlgia" data-convertible></td>
+                        <td style="table-cell" id="hlnto"></td>
+                        </tr>
+                </tbody>
+            </table>
+        `;
+    }
+
+    function updateTableValues(selectorId, nia, gia, ntg) {
+        const existingTable = document.querySelector(selectorId + " .table_AS");
+        if (existingTable) { existingTable.classList.add("d-none") }
+        const hlTableElement = document.querySelector(selectorId + " .table_AS_hl");
+        if (hlTableElement) { hlTableElement.remove() }
+        const template = document.createElement('template');
+        template.innerHTML = hlTable().trim();
+        const tableElement = template.content.firstChild;
+        document.querySelector(selectorId).appendChild(tableElement);
+        document.querySelector(selectorId + " #hlnia").textContent = formatNumber(nia);
+        document.querySelector(selectorId + " #hlgia").textContent = formatNumber(gia);
+        document.querySelector(selectorId + " #hlnto").textContent = (ntg * 100).toFixed(2) + ' %';
+        (selectorId == "#area_summary_table_p") ? document.getElementById("viewTblCurr").classList.add('d-none') : document.getElementById("viewTblPrev").classList.add('d-none');
+    }
+
+    function addLastRow(tableID, GIA) {
+        if (isPrevModelHL || iscurrModelHL) {
+            return;
+        }
+        const tableBody = document.querySelector("#" + tableID + "");
+        if (tableBody.querySelector("#gia-row" + tableID)) {
+            return;
+        }
+        const totalRow = tableBody.querySelector(".fw-bold");
+        const headers = document.querySelectorAll("#headerRow th");
+        const newRow = totalRow.cloneNode(true);
+        newRow.id = "gia-row" + tableID;
+        newRow.classList.remove("fw-bold");
+        newRow.classList.add("last-row");
+        if ((currentTable && tableID == "tableBody_p") || (previousTable && tableID == "tableBody")) {
+        }
+        else {
+            newRow.style.display = "none";
+        }
+        newRow.cells[0].textContent = "%GIA";
+        headers.forEach((header, index) => {
+            const headerText = header.textContent.trim();
+            const cell = newRow.cells[index];
+            if (headerText == "Total GIA") {
+                cell.textContent = "100%";
+            }
+            else if (headerText == "Net:Gross") {
+                cell.textContent = "";
+            }
+            else if (index > 0 && cell.textContent && !isNaN(cell.textContent.replace(/,/g, ''))) {
+                const value = (parseFloat(cell.textContent.replace(/,/g, '')) / GIA) * 100;
+                cell.textContent = (value.toFixed(2)) + '%';
+            }
+            else {
+                if (cell.textContent == '%GIA') return;
+                cell.textContent = "-";
+            }
+        });
+        tableBody.appendChild(newRow);
+    }
+</script>

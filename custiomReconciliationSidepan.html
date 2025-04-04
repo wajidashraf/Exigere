@@ -1,0 +1,815 @@
+<style>
+      #mainContent {
+            position: relative;
+      }
+
+      #sidebar {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 0px;
+            height: 100%;
+            background-color: #f8f9fa;
+            overflow-x: hidden;
+            transition: 0.5s;
+            z-index: 11111111;
+            padding-top: 120px;
+            box-shadow: 0px 12px 22px #0000003d;
+      }
+
+      #sidebarContent {
+            padding: 20px;
+      }
+
+      #sidebarToggle {
+            position: fixed;
+            top: 0px;
+            padding: 10px;
+            padding-top: 90px;
+            right: 0;
+            height: 100%;
+            background-color: #ffffff;
+            color: #fff;
+            cursor: pointer;
+            z-index: 1001;
+            box-shadow: 0px 12px 22px #b7b7b7;
+      }
+
+      div#sidebarToggle i {
+            color: #000;
+            height: 30px;
+            width: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 100%;
+            border: 1px solid #000;
+      }
+
+      #closeSidebar {
+            left: 11px;
+            color: #000;
+            height: 30px;
+            top: 90px;
+            width: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 100%;
+            border: 1px solid #000;
+            background: transparent;
+            position: absolute;
+      }
+
+      .switch {
+            position: relative;
+            height: 1.5rem;
+            width: 3rem;
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+            border-radius: 9999px;
+            background-color: rgba(100, 116, 139, 0.377);
+            transition: all .3s ease;
+      }
+
+      .switch:checked {
+            background-color: #EC002B;
+      }
+
+      .switch::before {
+            position: absolute;
+            content: "";
+            left: calc(1.5rem - 1.6rem);
+            top: calc(1.5rem - 1.6rem);
+            display: block;
+            height: 1.6rem;
+            width: 1.6rem;
+            cursor: pointer;
+            border: 1px solid rgba(100, 116, 139, 0.527);
+            border-radius: 9999px;
+            background-color: rgba(255, 255, 255, 1);
+            box-shadow: 0 3px 10px rgba(100, 116, 139, 0.327);
+            transition: all .3s ease;
+      }
+
+      .switch:hover::before {
+            box-shadow: 0 0 0px 8px rgba(0, 0, 0, .15)
+      }
+
+      .switch:checked:hover::before {
+            box-shadow: 0 0 0px 8px rgba(175, 80, 77, 0.15)
+      }
+
+      .switch:checked:before {
+            transform: translateX(100%);
+            border-color: rgb(175, 77, 77);
+      }
+
+      .disable_Inp {
+            background: #eee !important;
+            border: 0 !important;
+      }
+
+      #noAccessModal {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.8) !important;
+            backdrop-filter: blur(10px) !important;
+      }
+
+      .modal-content {
+            min-width: 500px;
+      }
+
+      .btn-outline-primary {
+            --bs-btn-color: #EC002B;
+            --bs-btn-border-color: #EC002B;
+            --bs-btn-hover-color: white;
+            --bs-btn-hover-bg: #EC002B;
+            --bs-btn-hover-border-color: #EC002B;
+            --bs-btn-active-color: white;
+            --bs-btn-active-bg: #EC002B;
+            --bs-btn-active-border-color: #EC002B;
+      }
+
+      .btn-toggle-group .btn:hover {
+            background-color: #EC002B !important;
+            color: white !important;
+      }
+
+      .btn-toggle-group .btn.active,
+      .btn-toggle-group .btn:checked {
+            background-color: #EC002B !important;
+            color: white !important;
+            border-color: #EC002B !important;
+      }
+
+      .model-toggle {
+            display: flex;
+            justify-content: center;
+      }
+
+      .model-toggle .btn {
+            padding: 5px 2rem;
+      }
+
+      .TypeLable_cm_pr,
+      .TypeLable_cm_cr {
+            display: inline-block;
+            padding: 5px 10px;
+            margin-left: 0.5rem;
+            border-radius: 25px;
+            font-size: 12px;
+            font-weight: bold;
+            box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+            text-align: center;
+      }
+
+      .TypeLable_as_cr,
+      .TypeLable_as_pr {
+            display: inline-block;
+            padding: 5px 10px;
+            margin-left: 0.5rem;
+            border-radius: 25px;
+            font-size: 12px;
+            font-weight: bold;
+            box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+            text-align: center;
+      }
+
+      .HighTypeLable_pr,
+      .HighTypeLable_cr {
+            border: 2px solid rgb(255, 143, 18);
+            background-color: rgb(255, 233, 208);
+            color: rgb(255, 143, 18);
+      }
+
+      .detailTypeLable_pr,
+      .detailTypeLable_cr {
+            border: 2px solid rgb(255, 233, 208);
+            background-color: rgb(255, 143, 18);
+            color: rgb(255, 233, 208);
+      }
+</style>
+
+<div id="sidebar">
+      <div id="sidebarContent">
+            <button id="closeSidebar" class="btn btn-danger"><i class="fa-solid fa-arrow-right"></i></button>
+            <div class="container my-3">
+                  <div class="btn-group btn-toggle-group model-toggle" role="group" aria-label="Three-Way Toggle">
+                        <input type="radio" class="btn-check" name="toggle" id="areas" autocomplete="off">
+                        <label class="btn btn-outline-primary" for="areas">Areas</label>
+                        <input type="radio" class="btn-check" name="toggle" id="all" checked autocomplete="off">
+                        <label class="btn btn-outline-primary" for="all">All</label>
+                        <input type="radio" class="btn-check" name="toggle" id="cost" autocomplete="off">
+                        <label class="btn btn-outline-primary" for="cost">Cost</label>
+                  </div>
+            </div>
+            <div class="row">
+                  <div class="col-6">
+                        <h6 class="mb-4">Previous Area Selection</h6>
+                        <p class="mb-1"> Building Stage </p>
+                        <select class="form-select mb-3" id="building_Stage_1">
+                              <option value="">All</option>
+                        </select>
+                        <p class="mb-1"> Model Selection </p>
+                        <select class="form-select mb-3" id="model_selection_1">
+                              <option value="">All</option>
+                        </select>
+                        <p> Cost Model Name <span class="TypeLable_cm_pr"></span></p>
+                        <input class="text-start form-control mb-3 disable_Inp" disabled id="costModel_1">
+                        </input>
+                        <p> Area Schedule Name <span class="TypeLable_as_pr"></span></p>
+                        <input class="text-start form-control mb-3 disable_Inp" disabled id="AreaSchedule_1">
+                        </input>
+                        <div id="msq_Toggle" class="d-flex align-items-center gap-2">
+                              <span>ft<sup>2</sup></span>
+                              <input checked="true" id="toggleUnits" type="checkbox" class="switch">
+                              <span>m<sup>2</sup></span>
+                        </div>
+                  </div>
+                  <div class="col-6">
+                        <h6 class="mb-4">Current Area Selection</h6>
+                        <p class="mb-1"> Building Stage </p>
+                        <select class="form-select mb-3" id="building_Stage">
+                              <option value="">All</option>
+                        </select>
+                        <p class="mb-1"> Model Selection </p>
+                        <select class="form-select mb-3" id="model_selection">
+                              <option value="">All</option>
+                        </select>
+                        <p> Cost Model Name <span class="TypeLable_cm_cr"></span></p>
+                        <input class="text-start form-control mb-3 disable_Inp" disabled id="costModel">
+                        </input>
+                        <p> Area Schedule Name <span class="TypeLable_as_cr"></span></p>
+                        <input class="text-start form-control mb-3 disable_Inp" disabled id="AreaSchedule">
+                        </input>
+
+                  </div>
+            </div>
+
+      </div>
+      <button id="printButton" class="btn" style="position: absolute; bottom: 10px; right: 150px;">
+            <i class="fa fa-print" aria-hidden="true"></i><br>Print
+      </button>
+
+      <button id="fileButton" class="btn" style="position: absolute; bottom: 10px; right: 30px;">
+            <i class="fa fa-file-pdf" aria-hidden="true"></i><br>Reports
+      </button>
+</div>
+<div id="sidebarToggle">
+      <i id="sidebarIcon" class="fa-solid fa-arrow-left"></i>
+</div>
+<div class="modal show fade" id="noAccessModal" tabindex="-1" role="dialog" aria-labelledby="noAccessLabel"
+      aria-hidden="true" style="display: none;">
+      <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                  <div class="modal-header">
+                        <h5 class="modal-title" id="noAccessModalLabel">Error message: </h5>
+                  </div>
+                  <div class="modal-body">
+                        <p> <span id="noAccessErrorMessage"> </span> </p>
+                  </div>
+                  <div class="modal-footer">
+                        <p> You will be redirected in: <strong><span id="accessTimer"> 5 </span></strong> </p>
+                  </div>
+            </div>
+      </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script>
+      const isExigereUser = ('{{user.roles}}'.includes("Exigere User"));
+      function filterOptions(selectId, suffix) {
+            document.getElementById("noFinalIssue" + suffix)?.remove();
+            document.getElementById("noDraftIssue" + suffix)?.remove();
+            if (isExigereUser) document.getElementById("noworkinprg" + suffix)?.remove();
+            const selectedToggle = document.querySelector('input[name="toggle"]:checked').id;
+            const options = document.querySelectorAll(`#${selectId} option`);
+            options.forEach((option, index) => {
+                  const iscmValue = option.getAttribute('iscm');
+                  if (selectedToggle === 'all') {
+                        option.style.display = '';
+                  }
+                  else if (selectedToggle === 'cost' && iscmValue === 'true') {
+                        option.style.display = '';
+                  }
+                  else if (selectedToggle === 'areas' && iscmValue === 'false') {
+                        option.style.display = '';
+                  }
+                  else {
+                        option.style.display = 'none';
+                  }
+            });
+            if (document.querySelectorAll("#finalGroup" + suffix + " option:not([style*='display: none'])").length == 0) {
+                  $('#finalGroup' + suffix).append('<option value="" id="noFinalIssue' + suffix + '" disabled> No final Issue found </option>');
+            }
+            if (document.querySelectorAll("#draftIssueGroup" + suffix + " option:not([style*='display: none'])").length == 0) {
+                  $('#draftIssueGroup' + suffix).append('<option value="" id="noDraftIssue' + suffix + '" disabled> No draft Issue found </option>');
+            }
+            if (document.querySelectorAll("#workinprgGroup" + suffix + " option:not([style*='display: none'])").length == 0) {
+                  $('#workinprgGroup' + suffix).append('<option value="" id="noworkinprg' + suffix + '" disabled> No Work in Progress found </option>');
+            }
+      }
+
+      function filterAllSelects() {
+            filterOptions('model_selection', '_cr');
+            filterOptions('model_selection_1', '_pr');
+      }
+
+      document.querySelectorAll('input[name="toggle"]').forEach((toggle) => {
+            toggle.addEventListener('change', filterAllSelects);
+      });
+
+      function togglePills(data, suffix) {
+            document.querySelector('.TypeLable_cm' + suffix).classList.remove("d-none");
+            document.querySelector('.TypeLable_cm' + suffix).classList.remove("detailTypeLable" + suffix);
+            document.querySelector('.TypeLable_cm' + suffix).classList.remove("HighTypeLable" + suffix);
+            if (data[0].crccd_exi_cost_models) {
+                  if (data[0].crccd_exi_cost_models.exi_costmodeltype.includes('Detailed Elemental Breakdown')) {
+                        document.querySelector('.TypeLable_cm' + suffix).innerHTML = "Detailed";
+                        document.querySelector('.TypeLable_cm' + suffix).classList.add("detailTypeLable" + suffix);
+                  }
+                  else {
+                        document.querySelector('.TypeLable_cm' + suffix).innerHTML = data[0].crccd_exi_cost_models.exi_costmodeltype;
+                        document.querySelector('.TypeLable_cm' + suffix).classList.add("HighTypeLable" + suffix);
+                  }
+            }
+            else {
+                  document.querySelector('.TypeLable_cm' + suffix).classList.add("d-none");
+            }
+
+            document.querySelector('.TypeLable_as' + suffix).classList.remove("d-none");
+            document.querySelector('.TypeLable_as' + suffix).classList.remove("detailTypeLable" + suffix);
+            document.querySelector('.TypeLable_as' + suffix).classList.remove("HighTypeLable" + suffix);
+            if (data[0].exi_AreaSchedule) {
+                  if (data[0].exi_AreaSchedule["exi_schedule_type@OData.Community.Display.V1.FormattedValue"].includes("Detailed Area Breakdown")) {
+                        document.querySelector('.TypeLable_as' + suffix).innerHTML = "Detailed";
+                        document.querySelector('.TypeLable_as' + suffix).classList.add("detailTypeLable" + suffix);
+                  }
+                  else {
+                        document.querySelector('.TypeLable_as' + suffix).innerHTML = data[0].exi_AreaSchedule["exi_schedule_type@OData.Community.Display.V1.FormattedValue"];
+                        document.querySelector('.TypeLable_as' + suffix).classList.add("HighTypeLable" + suffix);
+                  }
+            }
+            else {
+                  document.querySelector('.TypeLable_as' + suffix).classList.add("d-none");
+            }
+      }
+
+      function updateOrInsertUrlParameter(key, value) {
+            const url = new URL(window.location.href);
+            const params = new URLSearchParams(url.search);
+            params.set(key, value);
+            url.search = params.toString();
+            window.history.pushState({ path: url.href }, '', url.href);
+      }
+
+      document.addEventListener("DOMContentLoaded", function () {
+            $('#model_selection').append('<optgroup label="Final Issue" id="finalGroup_cr"></optgroup>').append('<optgroup label="Draft Issue" id="draftIssueGroup_cr"></optgroup>');
+            if (isExigereUser) $('#model_selection').append('<optgroup label="Work in Progress" id="workinprgGroup_cr"></optgroup>');
+            $('#model_selection_1').append('<optgroup label="Final Issue" id="finalGroup_pr"></optgroup>').append('<optgroup label="Draft Issue" id="draftIssueGroup_pr"></optgroup>');
+            if (isExigereUser) $('#model_selection_1').append('<optgroup label="Work in Progress" id="workinprgGroup_pr"></optgroup>');
+            let secondBSnotChanged = true;
+
+            function populateBSIs(data, modelSelectionId, suffix) {
+                  $('#' + modelSelectionId + ' option').remove();
+                  data.forEach(item => {
+                        let previous_BSI;
+                        let previous_Stage;
+                        if (modelSelectionId == "model_selection_1") {
+                              const urlParams = new URLSearchParams(window.location.search);
+                              previous_BSI = urlParams.get('pBSI');
+                              previous_Stage = urlParams.get('pSTG');
+                        }
+
+                        let verified = (item.exi_is_stage_cost_model) ? true : false;
+                        const option = `<option value="${item.exi_building_stage_instancesid}" isCM="${(item.exi_instancetype == 1)}"> ${verified ? '🟢' : ''} ${item.exi_name} </option>`;
+                        if (item.exi_issue_type == 5) {
+                              $('#finalGroup' + suffix).append(option);
+                        } else if (item.exi_issue_type == 3) {
+                              $('#draftIssueGroup' + suffix).append(option);
+                        }
+                        else {
+                              if (isExigereUser) $('#workinprgGroup' + suffix).append(option);
+                        }
+                        if (previous_BSI === item["exi_building_stage_instancesid"] && secondBSnotChanged && modelSelectionId == "model_selection_1") {
+                              $('#building_Stage_1').val(previous_Stage);
+                              $('#model_selection_1').val(item["exi_building_stage_instancesid"]);
+                              togglePills(data.filter(item => item["exi_building_stage_instancesid"] == $('#model_selection_1').val()), "_pr");
+                              sidebar.style.width = "0";
+                              setTimeout(function () {
+                                    document.getElementById('model_selection_1').dispatchEvent(new Event('change'));
+                              }, 300);
+                        }
+                  });
+                  if (document.querySelectorAll("#finalGroup" + suffix + " option:not([style*='display: none'])").length == 0) {
+                        $('#finalGroup' + suffix).append('<option value="" id="noFinalIssue" disabled> No final Issue found </option>');
+                  }
+                  if (document.querySelectorAll("#draftIssueGroup" + suffix + " option:not([style*='display: none'])").length == 0) {
+                        $('#draftIssueGroup' + suffix).append('<option value="" id="noDraftIssue' + suffix + '" disabled> No draft Issue found </option>');
+                  }
+                  if (document.querySelectorAll("#workinprgGroup" + suffix + " option:not([style*='display: none'])").length == 0) {
+                        $('#workinprgGroup' + suffix).append('<option value="" id="noworkinprg' + suffix + '" disabled> No Work in Progress found </option>');
+                  }
+            }
+
+            var sidebarIcon = document.getElementById("sidebarIcon");
+            var closeSidebar = document.getElementById("closeSidebar");
+            var sidebar = document.getElementById("sidebar");
+
+            sidebarIcon.addEventListener("click", function () {
+                  sidebar.style.width = "500px";
+            });
+
+            closeSidebar.addEventListener("click", function () {
+                  sidebar.style.width = "0";
+            });
+
+            var _url = "/_api/cloudflow/v1.0/trigger/7d31ee63-43fb-ef11-bae3-6045bd0b5ce6";
+            var data = {};
+            data["page"] = 1;
+            data["pageSize"] = "500";
+            data["select"] = "*";
+            data["orderby"] = "createdon desc";
+            data["filter"] = "_exi_building_value eq {{request.params.id}}";
+            data["expand"] = "exi_building($select=exi_building_short_name,_exi_project_value,exi_village,exi_buildingprojectid,exi_buildingname),crccd_exi_cost_models($select=exi_costmodeltype,exi_inflation_from),exi_AreaSchedule($select=exi_schedule_type)";
+            data["table"] = "buildingstageinstances";
+            var payload = {};
+            payload.eventData = JSON.stringify(data);
+            shell.ajaxSafePost({
+                  type: "POST",
+                  contentType: "application/json",
+                  url: _url,
+                  data: JSON.stringify(payload),
+                  processData: false,
+                  global: false,
+            }).done(function (response) {
+                  const result = JSON.parse(response);
+                  if (JSON.parse(result.output).length == 0) {
+                        document.addEventListener('contextmenu', function (event) {
+                              event.preventDefault();
+                        });
+                        document.addEventListener('mousedown', function (event) {
+                              event.preventDefault();
+                        });
+                        document.addEventListener('keydown', function (event) {
+                              if (
+                                    event.key === 'F12' ||
+                                    (event.ctrlKey && event.shiftKey && event.key === 'I') ||
+                                    (event.ctrlKey && event.shiftKey && event.key === 'i') ||
+                                    (event.ctrlKey && event.key === 'U') || (event.ctrlKey && event.key === 'u')
+                              ) {
+                                    event.preventDefault();
+                              }
+                        });
+                        let timer = 5;
+                        $("#noAccessModal").show();
+                        document.getElementById("noAccessErrorMessage").innerHTML = "You do not have access to view this building, please contact system administrator.";
+                        setTimeout(function () {
+                              location.href = '/Projects';
+                        }, 5000);
+                        setInterval(function () {
+                              document.getElementById('accessTimer').innerHTML = timer;
+                              timer--;
+                        }, 1000);
+                  }
+                  else {
+                        $("#noAccessModal").hide();
+                        window.arec_global_data = JSON.parse(result.output).buildingStageInstances;
+                        const data = JSON.parse(result.output).buildingStageInstances;
+
+                        function populateBuildingStage() {
+                              $('#building_Stage option[value!=""]').remove();
+                              let stages = ["1. Feasibility", "2. Cost Model Stage 2", "3. Cost Model Stage 3", "4. Cost Model Stage 4", "5. Pre Tender Estimate", "6. Contract Sum", "7. Final Account"];
+                              let stagesToAdd = [];
+                              for (let i = 0; i < stages.length; i++) {
+                                    for (let j = 0; j < data.length; j++) {
+                                          if (stages[i] == data[j]["exi_internalprojectstage@OData.Community.Display.V1.FormattedValue"]) {
+                                                stagesToAdd.push(stages[i]);
+                                          }
+                                    }
+                              }
+                              const uniqueStages = [...new Set(stagesToAdd)];
+                              uniqueStages.forEach((stage, index) => {
+                                    $('#building_Stage').append('<option value="' + (stages.indexOf(stage) + 1) + '">' + stage + '</option>');
+                              });
+                              updateModelSelection();
+                        }
+
+                        function populateBuildingStage_1() {
+                              $('#building_Stage_1 option[value!=""]').remove();
+                              let stages = ["1. Feasibility", "2. Cost Model Stage 2", "3. Cost Model Stage 3", "4. Cost Model Stage 4", "5. Pre Tender Estimate", "6. Contract Sum", "7. Final Account"];
+                              let stagesToAdd = [];
+                              for (let i = 0; i < stages.length; i++) {
+                                    for (let j = 0; j < data.length; j++) {
+                                          if (stages[i] == data[j]["exi_internalprojectstage@OData.Community.Display.V1.FormattedValue"]) {
+                                                stagesToAdd.push(stages[i]);
+                                          }
+                                    }
+                              }
+                              const uniqueStages = [...new Set(stagesToAdd)];
+                              uniqueStages.forEach((stage, index) => {
+                                    $('#building_Stage_1').append('<option value="' + (stages.indexOf(stage) + 1) + '">' + stage + '</option>');
+                              });
+                              updateModelSelection();
+                        }
+
+                        function populateModalSelection() {
+                              populateBSIs(data, 'model_selection', "_cr");
+                              filterOptions('model_selection', "_cr");
+                        }
+
+                        function populateModalSelection_1() {
+                              if (new URLSearchParams(window.location.search).get('pSTG') != null) {
+                                    populateBSIs(data.filter(item => item["exi_building_stage_instancesid"] == new URLSearchParams(window.location.search).get('pBSI')), 'model_selection_1', "_pr");
+                              }
+                              else {
+                                    populateBSIs(data, 'model_selection_1', "_pr");
+                                    $('#model_selection_1').val('');
+                              }
+                              if (new URLSearchParams(window.location.search).get('pBSI') != null) {
+                                    filterOptions('model_selection_1', "_pr");
+                              }
+                        }
+
+                        populateBuildingStage();
+                        populateModalSelection();
+                        populateBuildingStage_1();
+                        populateModalSelection_1();
+                        updateModelSelection();
+
+                        $('#building_Stage').on('change', function () {
+                              let selectedIndex = parseInt($(this).val());
+                              restrictStages(selectedIndex, true);
+                              if (!$(this).val() == '') {
+                                    populateBSIs(data.filter(item => item["exi_internalprojectstage@OData.Community.Display.V1.FormattedValue"] == $('#building_Stage option:selected').text()), 'model_selection', "_cr");
+                              }
+                              else {
+                                    $('#costModel').val('');
+                                    $('#AreaSchedule').val('');
+                                    $('#model_selection option[value!=""]').remove();
+                                    populateBuildingStage();
+                                    populateModalSelection();
+                                    selectedStageIndex = parseInt($('#building_Stage_1').val());
+                                    if (!isNaN(selectedStageIndex)) {
+                                          restrictStages(selectedStageIndex, false);
+                                    }
+                              }
+                              filterOptions('model_selection', "_cr");
+                              $('#model_selection').val('');
+                              updateModelSelection();
+                        });
+
+                        $('#building_Stage_1').on('change', function () {
+                              secondBSnotChanged = false;
+                              let selectedIndex = parseInt($(this).val());
+                              restrictStages(selectedIndex, false);
+                              if (!$(this).val() == '') {
+                                    populateBSIs(data.filter(item => item["exi_internalprojectstage@OData.Community.Display.V1.FormattedValue"] == $('#building_Stage_1 option:selected').text()), 'model_selection_1', "_pr");
+                              }
+                              else {
+                                    $('#costModel_1').val('');
+                                    $('#AreaSchedule_1').val('');
+                                    $('#model_selection_1 option[value!=""]').remove();
+                                    populateBuildingStage_1();
+                                    populateModalSelection_1();
+                                    let selectedStageIndex = parseInt($('#building_Stage').val());
+                                    if (!isNaN(selectedStageIndex)) {
+                                          restrictStages(selectedStageIndex, true);
+                                    }
+                              }
+                              filterOptions('model_selection_1', '_pr');
+                              $('#model_selection_1').val('');
+                              updateModelSelection();
+                        });
+
+                        function restrictStages(currentStageIndex, isCurrent) {
+                              let dropdownToRestrict = isCurrent ? '#building_Stage_1' : '#building_Stage';
+                              $(dropdownToRestrict + ' option[value!=""]').each(function () {
+                                    let optionIndex = parseInt($(this).val());
+                                    if (isCurrent) {
+                                          if (optionIndex > currentStageIndex) {
+                                                $(this).hide();
+                                          } else {
+                                                $(this).show();
+                                          }
+                                    } else {
+                                          if (optionIndex < currentStageIndex) {
+                                                $(this).hide();
+                                          } else {
+                                                $(this).show();
+                                          }
+                                    }
+                              });
+                        }
+
+                        $('#model_selection').on('change', function () {
+                              if (!$(this).val() == '') {
+                                    for (let j = 0; j < data.length; j++) {
+                                          if ($('#model_selection').val() == data[j]["exi_building_stage_instancesid"]) {
+                                                $('#costModel').val(data[j]["_crccd_exi_cost_models_value@OData.Community.Display.V1.FormattedValue"]);
+                                                $('#AreaSchedule').val(data[j]["_exi_areaschedule_value@OData.Community.Display.V1.FormattedValue"]);
+                                                updateOrInsertUrlParameter('building_stage', document.getElementById('building_Stage').value);
+                                                updateOrInsertUrlParameter('building_stage_instance', document.getElementById('model_selection').value);
+                                                updateOrInsertUrlParameter('area_schedule', data[j]["_exi_areaschedule_value"]);
+                                                updateOrInsertUrlParameter('cost_model', data[j]["_crccd_exi_cost_models_value"]);
+                                                updateOrInsertUrlParameter('programme', data[j]["_exi_programme_value"]);
+                                                updateOrInsertUrlParameter('area_schedule_name', document.getElementById('AreaSchedule').value);
+                                                updateOrInsertUrlParameter('cost_model_name', document.getElementById('costModel').value);
+                                                $('#c_stage_head').html($('#building_Stage option:selected').text());
+                                                setSecondaryNavBarLinks();
+                                          }
+                                    }
+                                    activeHref();
+                              }
+                              else {
+                                    $('#costModel').val('');
+                                    $('#AreaSchedule').val('');
+                              }
+                              togglePills(data.filter(item => item["exi_building_stage_instancesid"] == $('#model_selection').val()), "_cr");
+                        });
+
+                        $('#model_selection_1').on('change', function () {
+                              if (!$(this).val() == '') {
+                                    for (let j = 0; j < data.length; j++) {
+                                          if ($('#model_selection_1').val() == data[j]["exi_building_stage_instancesid"]) {
+                                                $('#costModel_1').val(data[j]["_crccd_exi_cost_models_value@OData.Community.Display.V1.FormattedValue"]);
+                                                $('#AreaSchedule_1').val(data[j]["_exi_areaschedule_value@OData.Community.Display.V1.FormattedValue"]);
+                                                updateOrInsertUrlParameter('pBSI', document.getElementById('model_selection_1').value);
+                                                updateOrInsertUrlParameter('pSTG', $('#building_Stage_1').val());
+                                                sessionStorage.setItem("building_stage_previous", $('#building_Stage_1').val());
+                                                sessionStorage.setItem("building_stage_instance_previous", $('#model_selection_1').val());
+                                                sessionStorage.setItem("area_schedule_previous", data[j]["_exi_areaschedule_value"]);
+                                                sessionStorage.setItem("cost_model_previous", data[j]["_crccd_exi_cost_models_value"]);
+                                                sessionStorage.setItem("programme_previous", data[j]["_exi_programme_value"]);
+                                                sessionStorage.setItem("area_schedule_name_previous", $('#AreaSchedule_1').val());
+                                                sessionStorage.setItem("cost_model_name_previous", $('#costModel_1').val());
+                                                setSecondaryNavBarLinks();
+                                                $('#p_stage_head').html($('#building_Stage_1 option:selected').text());
+                                          }
+                                    }
+                                    activeHref();
+                              }
+                              else {
+                                    $('#costModel_1').val('');
+                                    $('#AreaSchedule_1').val('');
+                                    sessionStorage.removeItem("building_stage_previous");
+                                    sessionStorage.removeItem("building_stage_instance_previous");
+                                    sessionStorage.removeItem("area_schedule_previous");
+                                    sessionStorage.removeItem("cost_model_previous");
+                                    sessionStorage.removeItem("area_schedule_name_previous");
+                                    sessionStorage.removeItem("cost_model_name_previous");
+                              }
+                              togglePills(data.filter(item => item["exi_building_stage_instancesid"] == $('#model_selection_1').val()), "_pr");
+                        });
+
+                        $('#building_Stage').val('{{request.params.building_stage}}');
+                        populateBSIs(data.filter(item => item["exi_internalprojectstage@OData.Community.Display.V1.FormattedValue"] == $('#building_Stage option:selected').text()), 'model_selection', "_cr");
+
+                        let selectedStageIndex = parseInt($('#building_Stage').val());
+                        if (!isNaN(selectedStageIndex)) {
+                              restrictStages(selectedStageIndex, true);
+                        }
+
+                        selectedStageIndex = parseInt($('#building_Stage_1').val());
+                        if (!isNaN(selectedStageIndex)) {
+                              restrictStages(selectedStageIndex, false);
+                        }
+
+                        $('#model_selection').val('{{request.params.building_stage_instance}}');
+                        togglePills(data.filter(item => item["exi_building_stage_instancesid"] == $('#model_selection').val()), "_cr");
+                        $('#AreaSchedule').val(('{{request.params.area_schedule_name}}').replace(/&#(\d+);/g, (match, dec) => String.fromCharCode(dec)));
+                        $('#costModel').val('{{request.params.cost_model_name}}');
+                        $('#c_stage_head').html($('#building_Stage option:selected').text());
+                  }
+            }).fail(function () {
+                  console.error("Flow Failed");
+            });
+      });
+      updateModelSelection();
+
+      $('#building_Stage_1, #building_Stage').on('change', function () {
+            updateModelSelection();
+      });
+      const observer = new MutationObserver(function (mutations) {
+            mutations.forEach(function (mutation) {
+                  if (mutation.type === 'childList' || mutation.type === 'attributes') {
+                        updateModelSelection();
+                  }
+            });
+      });
+
+      observer.observe(document.getElementById('building_Stage_1'), { childList: true, attributes: true, subtree: true });
+      observer.observe(document.getElementById('building_Stage'), { childList: true, attributes: true, subtree: true });
+
+      function ConstructURL(pageName, BS, BSI, AS, CM, Prog, ASName, CMName, pBSI, pSTG) {
+            let URL = "/" + pageName + "/?id=" + '{{request.params.id}}' + "&building_stage=" + BS + "&building_stage_instance=" + BSI + "&area_schedule=" + AS + "&cost_model=" + CM + "&programme=" + Prog + "&area_schedule_name=" + ASName + "&cost_model_name=" + CMName;
+            if (pBSI) {
+                  URL += "&pBSI=" + pBSI + "&pSTG=" + pSTG;
+            }
+            return URL;
+      }
+
+      function setSecondaryNavBarLinks() {
+            changeHref("Buildings/Areas-Summary", "areasummarytag");
+            changeHref("Buildings/Cost-Summary", "costsummarytag");
+            changeHref("Buildings/Drawing-Reconciliation", "drawingrectag");
+            changeHref("Buildings/Functional-Summary", "functionalsummary");
+            changeHref("Buildings", "buildingpagetag_sn");
+            changeHref("Buildings/Areas-Summary", "areasummarytag_sn");
+            changeHref("Buildings/Cost-Summary", "costsummarytag_sn");
+            changeHref("Buildings/Functional-Summary", "functionalsummary_sn");
+            changeHref("Programme-reconciliation", "progsummary_sn");
+            changeHref("Buildings/Drawing-Reconciliation", "drawingrectag_sn");
+            changeHref("Buildings/Costs-Reconciliation", "costsrectag_sn");
+            changeHref("Buildings/areas-reconciliation", "arearectag_sn");
+            changeHref("Buildings/Reception-Summary", "reception_sn");
+      }
+
+      function changeHref(pageName, tagID) {
+            const urlParams = new URLSearchParams(window.location.search);
+            let BS = urlParams.get('building_stage');
+            let BSI = urlParams.get('building_stage_instance');
+            let AS = urlParams.get('area_schedule');
+            let CM = urlParams.get('cost_model');
+            let Prog = urlParams.get('programme');
+            let ASName = urlParams.get('area_schedule_name');
+            let CMName = urlParams.get('cost_model_name');
+            let pBSI = urlParams.get('pBSI');
+            let pSTG = urlParams.get('pSTG');
+            const tags = document.querySelectorAll('.' + tagID);
+            tags.forEach(tag => {
+                  tag.href = ConstructURL(pageName, BS, BSI, AS, CM, Prog, ASName, CMName, pBSI, pSTG);
+            });
+      }
+
+      function updateModelSelection() {
+            if ($('#building_Stage_1').val() == "") {
+                  $('#model_selection_1').prop('disabled', true);
+            } else {
+                  $('#model_selection_1').prop('disabled', false);
+            }
+            if ($('#building_Stage').val() == "") {
+                  $('#model_selection').prop('disabled', true);
+            } else {
+                  $('#model_selection').prop('disabled', false);
+            }
+      }
+
+      $(document).ready(function () {
+            $('#fileButton').on('click', function () {
+                  const urlParams = new URLSearchParams(window.location.search);
+                  const bsiId = urlParams.get('building_stage_instance');
+                  if (bsiId) {
+                        window.open('/My-Reports/?id=' + bsiId, '_blank');
+                  }
+            });
+
+            document.getElementById('printButton').addEventListener('click', function () {
+                  html2canvas(document.getElementById('mainPageContent'), {
+                        useCORS: true,
+                        scale: 2,
+                        logging: true,
+                        allowTaint: true,
+                        backgroundColor: null,
+                        onclone: function (clonedDocument) {
+                              var footer = clonedDocument.querySelector('.footer');
+                              if (footer) {
+                                    footer.style.display = 'none';
+                              }
+                              var bottomNavElements = clonedDocument.querySelectorAll('.bottomNav');
+                              if (bottomNavElements) {
+                                    bottomNavElements.forEach(function (element) {
+                                          element.style.setProperty('display', 'none', 'important');
+                                    });
+                              }
+                        }
+                  }).then(function (canvas) {
+                        var iframe = document.createElement('iframe');
+                        iframe.style.position = 'absolute';
+                        iframe.style.right = '100%';
+                        document.body.appendChild(iframe);
+                        var img = new Image();
+                        img.src = canvas.toDataURL('image/png');
+                        img.onload = function () {
+                              var doc = iframe.contentWindow.document;
+                              doc.open();
+                              doc.write('<html><head><title>Print</title></head><body><img src="' + img.src + '" style="width: 100%;"></body></html>');
+                              doc.close();
+                              setTimeout(function () {
+                                    iframe.contentWindow.focus();
+                                    iframe.contentWindow.print();
+                                    setTimeout(function () {
+                                          document.body.removeChild(iframe);
+                                    }, 500);
+                              }, 1000);
+                        };
+                  }).catch(function (error) {
+                        console.error('Failed to capture:', error);
+                  });
+            });
+      })
+</script>
